@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Мои домики</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F3F5F1; --card:#FFFFFF; --ink:#17231C; --muted:#56635A; --accent:#1F5A41; --accent-dark:#143D2C;
+  --soft:#E3EDE6; --line:#E0E6E1; --warn:#852A20;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Manrope',system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit}
+#app{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+main{padding:20px 16px 24px;display:flex;flex-direction:column;gap:16px}
+nav#tabs{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:4px 0 calc(6px + env(safe-area-inset-bottom));z-index:5}
+nav#tabs button{background:none;border:0;font-size:11px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;min-height:54px;cursor:pointer}
+nav#tabs button.on{color:var(--accent);font-weight:800}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sub{font-size:13px;font-weight:600;color:var(--muted)}
+h1{margin:2px 0 0;font-size:28px;font-weight:800;letter-spacing:-.02em}
+h2{margin:4px 0 0;font-size:17px;font-weight:700}
+.iconbtn{width:44px;height:44px;border-radius:12px;border:0;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:#fff;border-radius:16px;padding:14px 16px}
+.tile b{display:block;font-size:24px;font-weight:800}
+.tile span{font-size:13px;color:var(--muted)}
+.tile.accent{grid-column:1/3;background:var(--accent);color:#fff;display:flex;justify-content:space-between;align-items:center;border:0;text-align:left;cursor:pointer;width:100%}
+.tile.accent span{color:#CFE3D7}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{background:#fff;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:12px;border:0;text-align:left;width:100%;cursor:pointer}
+.num{width:40px;height:40px;border-radius:12px;background:var(--soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:none}
+.grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.t{font-size:15px;font-weight:700}
+.s{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;white-space:nowrap;flex:none}
+.c-busy{background:#F1E4CF;color:#6E4210}.c-free{background:#DCEDE2;color:#1A5038}.c-in{background:#DCE6F4;color:#1E4A85}.c-out{background:#F4DEDA;color:#852A20}
+.btn{height:52px;border:0;border-radius:16px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;cursor:pointer;text-decoration:none}
+.btn:active{background:var(--accent-dark)}
+.btn.ghost{background:#fff;color:var(--ink);border:1.5px solid #CBD6CE;height:48px;font-size:15px}
+.btn.danger{background:#fff;color:var(--warn);border:1.5px solid #E7C3BD;height:48px;font-size:15px}
+.btn.small{height:40px;font-size:14px;border-radius:12px;width:auto;padding:0 14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:#fff;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.empty{background:#fff;border-radius:16px;padding:18px;text-align:center;color:var(--muted);font-size:14px;line-height:1.45}
+.kv{background:var(--bg);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.kv span{font-size:12px;color:var(--muted)}.kv b{font-size:15px}
+.note{font-size:14px;color:#3C4A41;background:#F6F0E4;border-radius:12px;padding:10px 12px;white-space:pre-wrap}
+.progress{height:10px;border-radius:999px;background:var(--soft);overflow:hidden}
+.progress div{height:100%;background:var(--accent)}
+.pay{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #E8ECE8}
+.pay:last-child{border-bottom:0}
+.x{width:32px;height:32px;border:0;border-radius:8px;background:var(--bg);color:var(--muted);cursor:pointer;flex:none}
+/* calendar */
+.calnav{display:flex;align-items:center;gap:8px}
+.cal{background:#fff;border-radius:16px;padding:10px 6px 4px;overflow:hidden}
+.crow{display:grid;grid-template-columns:58px repeat(7,minmax(0,1fr));align-items:center}
+.chead{text-align:center;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.chead .d{font-size:11px;color:var(--muted);font-weight:600}
+.chead .n{font-size:14px;font-weight:700;width:28px;height:28px;margin:2px auto 0;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.chead .today .n{background:var(--accent);color:#fff}
+.chead .we .d{color:#852A20}
+.cline{grid-template-rows:52px;border-bottom:1px solid #EEF1EE}
+.cline:last-child{border-bottom:0}
+.cname{grid-column:1;grid-row:1;font-size:12px;font-weight:700;padding-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell{grid-row:1;height:100%;border:0;background:transparent;cursor:pointer;padding:0;border-left:1px solid #F1F3F1}
+.cell:active{background:var(--soft)}
+.bar{grid-row:1;height:34px;margin:0 2px;border-radius:8px;border:0;background:var(--accent);color:#fff;font-size:12px;font-weight:700;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-align:left;position:relative;z-index:1}
+.bar.debt{background:#E3EDE6;color:#1A5038;border:1.5px dashed var(--accent)}
+.bar.cl{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:0}
+.bar.cr{border-top-right-radius:0;border-bottom-right-radius:0;margin-right:0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);padding:0 4px}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:6px}
+/* money */
+.hbar{display:grid;grid-template-columns:76px minmax(0,1fr) 92px;gap:10px;align-items:center;font-size:13px}
+.hbar .track{height:14px;border-radius:4px;background:var(--soft);overflow:hidden}
+.hbar .track div{height:100%;background:var(--accent);border-radius:4px}
+.split{height:8px;border-radius:999px;background:var(--soft);display:flex;overflow:hidden}
+/* forms */
+.field{display:flex;flex-direction:column;gap:6px}
+.field>label{font-size:13px;font-weight:600;color:var(--muted)}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:#fff;border:1.5px solid #D7DFD9;border-radius:12px;padding:11px 12px;width:100%;outline:none;-webkit-appearance:none;appearance:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{min-height:72px;resize:vertical}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:1.5px solid #D7DFD9;background:#fff;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;min-height:40px}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.err{background:#F4DEDA;color:#852A20;border-radius:12px;padding:10px 12px;font-size:14px;font-weight:600}
+.hint{font-size:13px;color:var(--muted)}
+.search{background:#fff}
+/* sheet */
+#sheet{position:fixed;inset:0;z-index:20}
+#sheet[hidden]{display:none}
+#sheet .backdrop{position:absolute;inset:0;background:rgba(15,25,20,.45)}
+#sheet .panel{position:absolute;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;max-height:92vh;overflow-y:auto;background:var(--bg);border-radius:24px 24px 0 0;padding:8px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px;animation:up .22s ease}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.grab{width:40px;height:5px;border-radius:3px;background:#C9D2CB;margin:4px auto 0;flex:none}
+.shead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#17231C;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;z-index:40;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+  <main id="view"></main>
+  <nav id="tabs">
+    <button data-act="tab" data-tab="today"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Сегодня</button>
+    <button data-act="tab" data-tab="cal"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Календарь</button>
+    <button data-act="tab" data-tab="guests"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"/></svg>Гости</button>
+    <button data-act="tab" data-tab="money"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20M16 15h2"/></svg>Деньги</button>
+  </nav>
+</div>
+<div id="sheet" hidden><div class="backdrop" data-act="close"></div><div class="panel" id="panel"></div></div>
+<div id="toast"></div>
+
+<script>
+/* ===== Telegram ===== */
+const tg = window.Telegram && window.Telegram.WebApp;
+const ver = v => !!(tg && tg.isVersionAtLeast && tg.isVersionAtLeast(v));
+if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#F3F5F1'); tg.setBackgroundColor('#F3F5F1'); } catch (e) {} }
+const cloudOK = !!(tg && tg.initData && tg.CloudStorage && ver('6.9'));
+const haptic = t => { try { tg.HapticFeedback.notificationOccurred(t || 'success'); } catch (e) {} };
+
+/* ===== Data ===== */
+const LS = 'domiki_v1';
+let cfg = { cabins: [1, 2, 3, 4].map(i => ({ id: i, name: 'Домик ' + i, price: 0 })) };
+let bookings = [];
+let ui = { tab: 'today', calStart: null, month: null, q: '' };
+
+const cs = {
+  keys: () => new Promise((res, rej) => tg.CloudStorage.getKeys((e, k) => e ? rej(e) : res(k || []))),
+  get: ks => new Promise((res, rej) => tg.CloudStorage.getItems(ks, (e, v) => e ? rej(e) : res(v || {}))),
+  set: (k, v) => new Promise((res, rej) => tg.CloudStorage.setItem(k, v, (e, ok) => e ? rej(e) : res(ok))),
+  del: k => new Promise((res, rej) => tg.CloudStorage.removeItem(k, (e, ok) => e ? rej(e) : res(ok)))
+};
+function backup() { try { localStorage.setItem(LS, JSON.stringify({ cfg, bookings })); } catch (e) {} }
+async function load() {
+  try { const raw = JSON.parse(localStorage.getItem(LS) || 'null'); if (raw) { cfg = raw.cfg || cfg; bookings = raw.bookings || []; } } catch (e) {}
+  if (cloudOK) {
+    try {
+      const keys = await cs.keys();
+      if (keys.length) {
+        const vals = {};
+        for (let i = 0; i < keys.length; i += 50) Object.assign(vals, await cs.get(keys.slice(i, i + 50)));
+        if (vals.cfg) cfg = JSON.parse(vals.cfg);
+        bookings = keys.filter(k => k.startsWith('b_')).map(k => { try { return JSON.parse(vals[k]); } catch (e) { return null; } }).filter(Boolean);
+      } else if (bookings.length) {
+        await cs.set('cfg', JSON.stringify(cfg));
+        for (const b of bookings) await cs.set('b_' + b.id, JSON.stringify(b));
+      }
+    } catch (e) { toast('Не получилось загрузить данные из Telegram'); }
+  }
+  backup();
+}
+async function saveBooking(b) {
+  const i = bookings.findIndex(x => x.id === b.id);
+  if (i >= 0) bookings[i] = b; else bookings.push(b);
+  backup();
+  if (cloudOK) { try { await cs.set('b_' + b.id, JSON.stringify(b)); } catch (e) { toast('Сохранено только на этом телефоне'); } }
+}
+async function removeBooking(id) {
+  bookings = bookings.filter(b => b.id !== id); backup();
+  if (cloudOK) { try { await cs.del('b_' + id); } catch (e) {} }
+}
+async function saveCfg() { backup(); if (cloudOK) { try { await cs.set('cfg', JSON.stringify(cfg)); } catch (e) {} } }
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/* ===== Helpers ===== */
+const pad = n => String(n).padStart(2, '0');
+const ds = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const today = () => ds(new Date());
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return ds(d); };
+const diff = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
+const MON = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+const MONG = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const MONN = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const WD = ['вс','пн','вт','ср','чт','пт','сб'];
+const WDF = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+const fd = s => { const d = parse(s); return d.getDate() + ' ' + MON[d.getMonth()]; };
+const money = n => Math.round(+n || 0).toLocaleString('ru-RU') + ' ₽';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const paid = b => (b.payments || []).reduce((s, p) => s + (+p.amount || 0), 0);
+const debt = b => Math.max(0, (+b.total || 0) - paid(b));
+const cabin = id => cfg.cabins.find(c => c.id == id) || { name: 'Домик', price: 0 };
+const short = n => String(n || '').trim().split(/\s+/)[0] || 'Гость';
+const nightsWord = n => n % 10 === 1 && n % 100 !== 11 ? 'ночь' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'ночи' : 'ночей');
+const digits = p => { let d = String(p || '').replace(/\D/g, ''); if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1); if (d.length === 10) d = '7' + d; return d; };
+const byIn = (a, b) => a.inDate < b.inDate ? -1 : a.inDate > b.inDate ? 1 : 0;
+function toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2200); }
+function confirmBox(text) {
+  return new Promise(res => { if (tg && ver('6.2')) tg.showConfirm(text, ok => res(ok)); else res(window.confirm(text)); });
+}
+const ICON = {
+  plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  left: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
+  right: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  phone: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
+  send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>'
+};
+
+/* ===== Status ===== */
+function cabinStatus(c, t) {
+  const bs = bookings.filter(b => b.cabin == c.id);
+  const inB = bs.find(b => b.inDate === t), outB = bs.find(b => b.outDate === t), stay = bs.find(b => b.inDate < t && b.outDate > t);
+  if (inB && outB) return { cls: 'c-out', chip: 'Смена гостей', sub: short(outB.name) + ' → ' + short(inB.name) + (inB.inTime ? ' в ' + inB.inTime : ''), b: inB };
+  if (inB) return { cls: 'c-in', chip: 'Заезд' + (inB.inTime ? ' ' + inB.inTime : ''), sub: inB.name, b: inB };
+  if (outB) return { cls: 'c-out', chip: 'Выезд' + (outB.outTime ? ' ' + outB.outTime : ''), sub: outB.name, b: outB };
+  if (stay) return { cls: 'c-busy', chip: 'Занят', sub: stay.name + ' · до ' + fd(stay.outDate), b: stay };
+  const next = bs.filter(b => b.inDate > t).sort(byIn)[0];
+  return { cls: 'c-free', chip: 'Свободен', sub: next ? 'Следующий заезд ' + fd(next.inDate) : 'Броней пока нет', b: null };
+}
+
+/* ===== Views ===== */
+function render() {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
+  const v = document.getElementById('view');
+  v.innerHTML = ({ today: vToday, cal: vCal, guests: vGuests, money: vMoney })[ui.tab]();
+  if (ui.tab === 'guests') renderGuestList();
+  window.scrollTo(0, 0);
+}
+
+function vToday() {
+  const t = today(), d = parse(t);
+  const occupied = cfg.cabins.filter(c => bookings.some(b => b.cabin == c.id && b.inDate <= t && b.outDate > t)).length;
+  const ins = bookings.filter(b => b.inDate === t).length, outs = bookings.filter(b => b.outDate === t).length;
+  const debtors = bookings.filter(b => debt(b) > 0);
+  const owed = debtors.reduce((s, b) => s + debt(b), 0);
+  const upcoming = bookings.filter(b => b.inDate > t).sort(byIn).slice(0, 5);
+  const noPrices = cfg.cabins.every(c => !+c.price);
+  return `
+  <div class="head">
+    <div><div class="sub">${WDF[d.getDay()]}, ${d.getDate()} ${MONG[d.getMonth()]}</div><h1>Мои домики</h1></div>
+    <button class="iconbtn" data-act="settings" aria-label="Настройки">${ICON.gear}</button>
+  </div>
+  <div class="tiles">
+    <div class="tile"><b>${occupied} из ${cfg.cabins.length}</b><span>занято сегодня</span></div>
+    <div class="tile"><b>${ins} / ${outs}</b><span>заезды / выезды</span></div>
+    <button class="tile accent" data-act="tab" data-tab="money">
+      <div><span>Ждём оплату</span><b>${money(owed)}</b></div>
+      <span style="font-weight:600">${debtors.length ? debtors.length + ' ' + (debtors.length === 1 ? 'гость' : debtors.length < 5 ? 'гостя' : 'гостей') : 'всё оплачено'}</span>
+    </button>
+  </div>
+  ${noPrices ? '<button class="row" data-act="settings"><div class="grow"><div class="t">Укажите цены за ночь</div><div class="s">Тогда сумма брони будет считаться сама</div></div><span class="chip c-in">Настроить</span></button>' : ''}
+  <h2>Домики сегодня</h2>
+  <div class="list">
+    ${cfg.cabins.map((c, i) => { const st = cabinStatus(c, t); return `
+      <button class="row" data-act="${st.b ? 'card' : 'new'}" data-id="${st.b ? st.b.id : ''}" data-cabin="${c.id}" data-date="${t}">
+        <div class="num">${i + 1}</div>
+        <div class="grow"><div class="t">${esc(c.name)}</div><div class="s">${esc(st.sub)}</div></div>
+        <span class="chip ${st.cls}">${st.chip}</span>
+      </button>`; }).join('')}
+  </div>
+  <button class="btn" data-act="new">${ICON.plus}Новая бронь</button>
+  <h2>Ближайшие заезды</h2>
+  <div class="list">
+    ${upcoming.length ? upcoming.map(b => `
+      <button class="row" data-act="card" data-id="${b.id}">
+        <div class="grow"><div class="t">${esc(b.name)}</div><div class="s">${esc(cabin(b.cabin).name)} · ${fd(b.inDate)} – ${fd(b.outDate)}</div></div>
+        ${debt(b) > 0 ? `<span class="chip c-out">долг ${money(debt(b))}</span>` : '<span class="chip c-free">оплачено</span>'}
+      </button>`).join('') : '<div class="empty">Будущих броней пока нет</div>'}
+  </div>`;
+}
+
+function vCal() {
+  const start = ui.calStart || today();
+  const end = addDays(start, 7), t = today();
+  const days = [...Array(7)].map((_, i) => addDays(start, i));
+  const sd = parse(start);
+  const week = bookings.filter(b => b.inDate < end && b.outDate > start).sort(byIn);
+  return `
+  <div class="calnav">
+    <h1 style="flex:1">${MONN[sd.getMonth()]} <span style="color:var(--muted);font-weight:600;font-size:18px">${sd.getFullYear()}</span></h1>
+    <button class="iconbtn" data-act="calmove" data-n="-7" aria-label="Неделя назад">${ICON.left}</button>
+    <button class="iconbtn" data-act="calmove" data-n="7" aria-label="Неделя вперёд">${ICON.right}</button>
+  </div>
+  ${start !== t ? '<button class="btn ghost small" data-act="caltoday" style="align-self:flex-start">К сегодняшнему дню</button>' : ''}
+  <div class="cal">
+    <div class="crow chead"><div></div>
+      ${days.map(x => { const d = parse(x); return `<div class="${x === t ? 'today' : ''} ${d.getDay() % 6 === 0 ? 'we' : ''}"><div class="d">${WD[d.getDay()]}</div><div class="n">${d.getDate()}</div></div>`; }).join('')}
+    </div>
+    ${cfg.cabins.map(c => {
+      const bars = bookings.filter(b => b.cabin == c.id && b.inDate < end && b.outDate > start).map(b => {
+        const a = Math.max(0, diff(start, b.inDate)), z = Math.min(7, diff(start, b.outDate));
+        if (z <= a) return '';
+        const cls = (debt(b) > 0 ? ' debt' : '') + (b.inDate < start ? ' cl' : '') + (b.outDate > end ? ' cr' : '');
+        return `<button class="bar${cls}" style="grid-column:${a + 2} / ${z + 2}" data-act="card" data-id="${b.id}">${esc(short(b.name))}</button>`;
+      }).join('');
+      return `<div class="crow cline"><div class="cname">${esc(c.name)}</div>
+        ${days.map((x, i) => `<button class="cell" style="grid-column:${i + 2}" data-act="new" data-cabin="${c.id}" data-date="${x}" aria-label="Новая бронь: ${esc(c.name)}, ${fd(x)}"></button>`).join('')}
+        ${bars}</div>`;
+    }).join('')}
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--accent)"></i>оплачено</span>
+    <span><i style="background:#E3EDE6;border:1.5px dashed var(--accent);box-sizing:border-box"></i>есть долг</span>
+    <span><i style="background:#fff;border:1px solid #CBD6CE;box-sizing:border-box"></i>свободно — нажмите, чтобы добавить</span>
+  </div>
+  <h2>Брони на этой неделе</h2>
+  <div class="list">
+    ${week.length ? week.map(b => `
+      <button class="row" data-act="card" data-id="${b.id}">
+        <div class="grow"><div class="t">${esc(b.name)}</div><div class="s">${esc(cabin(b.cabin).name)} · ${fd(b.inDate)} – ${fd(b.outDate)}</div></div>
+        ${debt(b) > 0 ? `<span class="chip c-out">долг ${money(debt(b))}</span>` : '<span class="chip c-free">оплачено</span>'}
+      </button>`).join('') : '<div class="empty">На этой неделе броней нет</div>'}
+  </div>`;
+}
+
+function guestGroups() {
+  const map = new Map();
+  for (const b of bookings) {
+    const key = digits(b.phone) || 'n:' + String(b.name || '').trim().toLowerCase();
+    if (!map.has(key)) map.set(key, { key, name: b.name, phone: b.phone, list: [] });
+    const g = map.get(key); g.list.push(b);
+    if (b.inDate >= g.list.reduce((m, x) => x.inDate > m ? x.inDate : m, '')) { g.name = b.name; g.phone = b.phone || g.phone; }
+  }
+  return [...map.values()].map(g => ({ ...g, last: g.list.reduce((m, x) => x.inDate > m ? x.inDate : m, ''), total: g.list.reduce((s, b) => s + paid(b), 0) }))
+    .sort((a, b) => a.last < b.last ? 1 : -1);
+}
+function vGuests() {
+  return `<div><div class="sub">Все, кто у вас жил и забронировал</div><h1>Гости</h1></div>
+  <input class="search" id="q" type="search" placeholder="Поиск по имени или телефону" value="${esc(ui.q)}" autocomplete="off">
+  <div class="list" id="glist"></div>`;
+}
+function renderGuestList() {
+  const q = ui.q.trim().toLowerCase(), qd = q.replace(/\D/g, '');
+  const gs = guestGroups().filter(g => !q || String(g.name).toLowerCase().includes(q) || (qd && digits(g.phone).includes(qd)));
+  document.getElementById('glist').innerHTML = gs.length ? gs.map(g => `
+    <button class="row" data-act="guest" data-key="${esc(g.key)}">
+      <div class="num">${esc(String(g.name || '?').trim()[0] || '?').toUpperCase()}</div>
+      <div class="grow"><div class="t">${esc(g.name)}</div><div class="s">${esc(g.phone || 'без телефона')} · ${g.list.length} ${g.list.length === 1 ? 'визит' : g.list.length < 5 ? 'визита' : 'визитов'}</div></div>
+      <span class="chip c-free">${money(g.total)}</span>
+    </button>`).join('') : `<div class="empty">${bookings.length ? 'Никого не нашлось' : 'Гости появятся здесь, когда вы добавите первую бронь'}</div>`;
+}
+
+function vMoney() {
+  const m = ui.month || today().slice(0, 7);
+  const [yy, mm] = m.split('-').map(Number);
+  const pays = [];
+  bookings.forEach(b => (b.payments || []).forEach(p => { if ((p.date || '').startsWith(m)) pays.push({ ...p, b }); }));
+  const total = pays.reduce((s, p) => s + (+p.amount || 0), 0);
+  const methods = ['перевод', 'наличные', 'карта'].map(k => ({ k, v: pays.filter(p => p.method === k).reduce((s, p) => s + (+p.amount || 0), 0) })).filter(x => x.v > 0);
+  const colors = { 'перевод': '#1F5A41', 'наличные': '#C98A2E', 'карта': '#3E6FA8' };
+  const byCabin = cfg.cabins.map(c => ({ c, v: pays.filter(p => p.b.cabin == c.id).reduce((s, p) => s + (+p.amount || 0), 0) }));
+  const max = Math.max(1, ...byCabin.map(x => x.v));
+  const debts = bookings.filter(b => debt(b) > 0).sort(byIn);
+  const recent = pays.sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 12);
+  return `
+  <div class="calnav">
+    <div style="flex:1"><div class="sub">Деньги</div><h1>${MONN[mm - 1]} <span style="color:var(--muted);font-weight:600;font-size:18px">${yy}</span></h1></div>
+    <button class="iconbtn" data-act="monthmove" data-n="-1" aria-label="Прошлый месяц">${ICON.left}</button>
+    <button class="iconbtn" data-act="monthmove" data-n="1" aria-label="Следующий месяц">${ICON.right}</button>
+  </div>
+  <div class="card">
+    <div><div class="sub">Получено за месяц</div><div style="font-size:30px;font-weight:800;color:var(--accent)">${money(total)}</div></div>
+    ${total ? `<div class="split">${methods.map(x => `<div style="width:${x.v / total * 100}%;background:${colors[x.k]}"></div>`).join('')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px">${methods.map(x => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${colors[x.k]};margin-right:6px"></i>${x.k[0].toUpperCase() + x.k.slice(1)} ${money(x.v)}</span>`).join('')}</div>` : '<div class="hint">В этом месяце оплат пока не было</div>'}
+  </div>
+  <h2>По домикам</h2>
+  <div class="card" style="gap:10px">
+    ${byCabin.map(x => `<div class="hbar"><span class="s">${esc(x.c.name)}</span><div class="track"><div style="width:${x.v / max * 100}%"></div></div><b style="text-align:right">${money(x.v)}</b></div>`).join('')}
+  </div>
+  <div class="head" style="align-items:baseline"><h2>Должны</h2><b style="color:var(--warn)">${money(debts.reduce((s, b) => s + debt(b), 0))}</b></div>
+  <div class="list">
+    ${debts.length ? debts.map(b => `
+      <button class="row" data-act="card" data-id="${b.id}">
+        <div class="grow"><div class="t">${esc(b.name)}</div><div class="s">${esc(cabin(b.cabin).name)} · ${fd(b.inDate)} – ${fd(b.outDate)}</div></div>
+        <b>${money(debt(b))}</b>
+      </button>`).join('') : '<div class="empty">Никто ничего не должен</div>'}
+  </div>
+  <h2>Оплаты за месяц</h2>
+  <div class="card" style="padding:4px 16px">
+    ${recent.length ? recent.map(p => `
+      <div class="pay"><div class="grow"><div class="t" style="font-size:14px">${esc(p.b.name)} · ${esc(cabin(p.b.cabin).name)}</div><div class="s">${fd(p.date)} · ${esc(p.method)}</div></div>
+      <b style="color:#1A5038">+${money(p.amount)}</b></div>`).join('') : '<div class="hint" style="padding:12px 0">Пока пусто</div>'}
+  </div>`;
+}
+
+/* ===== Sheets ===== */
+let onSheetClose = null;
+function openSheet(html) {
+  const s = document.getElementById('sheet');
+  document.getElementById('panel').innerHTML = '<div class="grab"></div>' + html;
+  s.hidden = false; document.body.style.overflow = 'hidden';
+  document.getElementById('panel').scrollTop = 0;
+  if (tg && ver('6.1')) tg.BackButton.show();
+}
+function closeSheet() {
+  document.getElementById('sheet').hidden = true; document.body.style.overflow = '';
+  if (tg && ver('6.1')) tg.BackButton.hide();
+  render();
+}
+if (tg && ver('6.1')) tg.BackButton.onClick(closeSheet);
+
+/* --- Booking card --- */
+function openCard(id) {
+  const b = bookings.find(x => x.id === id); if (!b) return;
+  const n = diff(b.inDate, b.outDate), p = paid(b), d = debt(b), t = today();
+  const pct = b.total > 0 ? Math.min(100, p / b.total * 100) : (p > 0 ? 100 : 0);
+  const state = b.outDate < t ? ['Выехали', 'c-free'] : b.inDate <= t ? ['Живут сейчас', 'c-busy'] : ['Ждём заезда', 'c-in'];
+  const ph = digits(b.phone);
+  openSheet(`
+  <div class="shead"><div class="sub">${esc(cabin(b.cabin).name)}</div><span class="chip ${state[1]}">${state[0]}</span></div>
+  <div class="card">
+    <div><h1 style="font-size:24px">${esc(b.name)}</h1><div class="s" style="white-space:normal">${esc(b.phone || 'телефон не указан')}${b.source ? ' · ' + esc(b.source) : ''}</div></div>
+    <div class="grid2">
+      <div class="kv"><span>Заезд</span><b>${fd(b.inDate)}${b.inTime ? ', ' + esc(b.inTime) : ''}</b></div>
+      <div class="kv"><span>Выезд</span><b>${fd(b.outDate)}${b.outTime ? ', ' + esc(b.outTime) : ''}</b></div>
+      <div class="kv"><span>Ночей</span><b>${n}</b></div>
+      <div class="kv"><span>Гости</span><b>${+b.adults || 0} взр.${+b.kids ? ' + ' + b.kids + ' реб.' : ''}</b></div>
+    </div>
+    ${b.note ? `<div class="note">${esc(b.note)}</div>` : ''}
+  </div>
+  <div class="card">
+    <div class="head" style="align-items:baseline"><h2 style="margin:0">Оплата</h2><span class="s">${b.perNight ? n + ' ' + nightsWord(n) + ' × ' + money(b.perNight) : ''}</span></div>
+    <div class="progress"><div style="width:${pct}%"></div></div>
+    <div class="head" style="font-size:14px;align-items:baseline"><div><b>${money(p)}</b> <span class="s">из ${money(b.total)}</span></div>
+      ${d > 0 ? `<b style="color:var(--warn)">осталось ${money(d)}</b>` : '<b style="color:#1A5038">оплачено</b>'}</div>
+    <div>${(b.payments || []).slice().sort((x, y) => x.date < y.date ? -1 : 1).map(pm => `
+      <div class="pay"><div class="grow"><div class="t" style="font-size:14px">${money(pm.amount)}</div><div class="s">${fd(pm.date)} · ${esc(pm.method)}${pm.note ? ' · ' + esc(pm.note) : ''}</div></div>
+      <button class="x" data-act="delpay" data-id="${b.id}" data-pid="${pm.id}" aria-label="Удалить оплату">✕</button></div>`).join('') || '<div class="hint">Оплат пока нет</div>'}</div>
+    <div id="payform" hidden style="display:flex;flex-direction:column;gap:10px">
+      <div class="grid2">
+        <div class="field"><label for="p_amount">Сумма, ₽</label><input id="p_amount" type="number" inputmode="numeric" value="${d || ''}"></div>
+        <div class="field"><label for="p_date">Дата</label><input id="p_date" type="date" value="${t}"></div>
+      </div>
+      <div class="seg" id="p_method">${['перевод', 'наличные', 'карта'].map((m, i) => `<button type="button" data-act="pick" class="${i === 0 ? 'on' : ''}" data-v="${m}">${m}</button>`).join('')}</div>
+      <input id="p_note" placeholder="Комментарий (необязательно)" maxlength="80">
+      <button class="btn" data-act="savepay" data-id="${b.id}">Сохранить оплату</button>
+    </div>
+    <button class="btn" id="paybtn" data-act="showpay">Принять оплату</button>
+  </div>
+  ${ph ? `<div class="grid2">
+    <a class="btn ghost" href="tel:+${ph}">${ICON.phone}Позвонить</a>
+    <button class="btn ghost" data-act="write" data-ph="${ph}">${ICON.send}Написать</button>
+  </div>` : ''}
+  <div class="grid2">
+    <button class="btn ghost" data-act="edit" data-id="${b.id}">Изменить</button>
+    <button class="btn danger" data-act="delbooking" data-id="${b.id}">Удалить</button>
+  </div>`);
+  document.getElementById('payform').style.display = 'none';
+}
+
+/* --- Booking form --- */
+let form = null;
+function openForm(b, pre) {
+  const isNew = !b;
+  const inD = b ? b.inDate : (pre && pre.date) || today();
+  const cab = b ? b.cabin : (pre && +pre.cabin) || cfg.cabins[0].id;
+  const pn = b ? (b.perNight || '') : (+cabin(cab).price || '');
+  b = b || { id: uid(), cabin: cab, name: '', phone: '', inDate: inD, inTime: '14:00', outDate: addDays(inD, 1), outTime: '12:00', adults: 2, kids: 0, perNight: pn, total: pn || '', source: '', note: '', payments: [] };
+  form = { b, isNew, cabin: b.cabin, source: b.source, totalTouched: !isNew && b.perNight && +b.total !== b.perNight * diff(b.inDate, b.outDate) };
+  const sources = ['Авито', 'Суточно', 'Знакомые', 'Повторно', 'Соцсети', 'Другое'];
+  openSheet(`
+  <div class="shead"><h1 style="font-size:24px">${isNew ? 'Новая бронь' : 'Изменить бронь'}</h1></div>
+  <div class="err" id="ferr" hidden></div>
+  <div class="field"><label for="f_name">Имя гостя</label><input id="f_name" value="${esc(b.name)}" placeholder="Фамилия Имя" autocomplete="off" maxlength="60"></div>
+  <div class="field"><label for="f_phone">Телефон</label><input id="f_phone" type="tel" value="${esc(b.phone)}" placeholder="+7 900 000-00-00" maxlength="25"></div>
+  <div class="field"><label>Домик</label><div class="seg" id="f_cabin">${cfg.cabins.map(c => `<button type="button" data-act="fcabin" data-v="${c.id}" class="${c.id == b.cabin ? 'on' : ''}">${esc(c.name)}</button>`).join('')}</div></div>
+  <div class="grid2">
+    <div class="field"><label for="f_in">Заезд</label><input id="f_in" type="date" value="${b.inDate}"></div>
+    <div class="field"><label for="f_intime">Время</label><input id="f_intime" type="time" value="${esc(b.inTime || '')}"></div>
+    <div class="field"><label for="f_out">Выезд</label><input id="f_out" type="date" value="${b.outDate}"></div>
+    <div class="field"><label for="f_outtime">Время</label><input id="f_outtime" type="time" value="${esc(b.outTime || '')}"></div>
+    <div class="field"><label for="f_ad">Взрослых</label><input id="f_ad" type="number" inputmode="numeric" min="0" value="${+b.adults || 0}"></div>
+    <div class="field"><label for="f_kids">Детей</label><input id="f_kids" type="number" inputmode="numeric" min="0" value="${+b.kids || 0}"></div>
+    <div class="field"><label for="f_pn">Цена за ночь, ₽</label><input id="f_pn" type="number" inputmode="numeric" value="${b.perNight || ''}"></div>
+    <div class="field"><label for="f_total">Итого, ₽</label><input id="f_total" type="number" inputmode="numeric" value="${b.total || ''}"></div>
+  </div>
+  <div class="hint" id="f_nights"></div>
+  <div class="field"><label>Откуда гость</label><div class="seg" id="f_source">${sources.map(s => `<button type="button" data-act="fsource" data-v="${s}" class="${s === b.source ? 'on' : ''}">${s}</button>`).join('')}</div></div>
+  <div class="field"><label for="f_note">Заметка</label><textarea id="f_note" maxlength="400" placeholder="Пожелания, машина, животные…">${esc(b.note)}</textarea></div>
+  ${isNew ? `<div class="card" style="gap:10px"><div class="t">Предоплата (если уже внесли)</div>
+    <input id="f_pre" type="number" inputmode="numeric" placeholder="Сумма, ₽">
+    <div class="seg" id="f_pmethod">${['перевод', 'наличные', 'карта'].map((m, i) => `<button type="button" data-act="pick" class="${i === 0 ? 'on' : ''}" data-v="${m}">${m}</button>`).join('')}</div></div>` : ''}
+  <button class="btn" data-act="saveform">${isNew ? 'Сохранить бронь' : 'Сохранить изменения'}</button>
+  <button class="btn ghost" data-act="close">Отмена</button>`);
+  recalc();
+}
+const val = id => (document.getElementById(id) || {}).value || '';
+function recalc() {
+  const n = val('f_in') && val('f_out') ? diff(val('f_in'), val('f_out')) : 0;
+  const pn = +val('f_pn') || 0;
+  if (!form.totalTouched && pn && n > 0) document.getElementById('f_total').value = pn * n;
+  document.getElementById('f_nights').textContent = n > 0 ? n + ' ' + nightsWord(n) : 'Выезд должен быть позже заезда';
+}
+async function saveForm() {
+  const err = document.getElementById('ferr');
+  const showErr = t => { err.textContent = t; err.hidden = false; document.getElementById('panel').scrollTop = 0; haptic('error'); };
+  const name = val('f_name').trim(), inD = val('f_in'), outD = val('f_out');
+  if (!name) return showErr('Впишите имя гостя');
+  if (!inD || !outD || diff(inD, outD) <= 0) return showErr('Выезд должен быть позже заезда');
+  const clash = bookings.find(x => x.id !== form.b.id && x.cabin == form.cabin && x.inDate < outD && inD < x.outDate);
+  if (clash) return showErr(`${cabin(form.cabin).name} уже занят: ${clash.name}, ${fd(clash.inDate)} – ${fd(clash.outDate)}`);
+  const b = { ...form.b, name, phone: val('f_phone').trim(), cabin: form.cabin, inDate: inD, outDate: outD, inTime: val('f_intime'), outTime: val('f_outtime'),
+    adults: +val('f_ad') || 0, kids: +val('f_kids') || 0, perNight: +val('f_pn') || 0, total: +val('f_total') || 0, source: form.source || '', note: val('f_note').trim() };
+  if (form.isNew) {
+    b.created = today();
+    const pre = +val('f_pre') || 0;
+    if (pre > 0) b.payments = [{ id: uid(), amount: pre, method: document.querySelector('#f_pmethod .on').dataset.v, date: today(), note: 'предоплата' }];
+  }
+  await saveBooking(b); haptic(); toast(form.isNew ? 'Бронь сохранена' : 'Изменения сохранены');
+  openCard(b.id);
+}
+
+/* --- Guest sheet --- */
+function openGuest(key) {
+  const g = guestGroups().find(x => x.key === key); if (!g) return;
+  const ph = digits(g.phone);
+  openSheet(`
+  <div><div class="sub">Гость</div><h1 style="font-size:24px">${esc(g.name)}</h1><div class="s">${esc(g.phone || 'телефон не указан')}</div></div>
+  <div class="grid2"><div class="kv" style="background:#fff"><span>Визитов</span><b>${g.list.length}</b></div><div class="kv" style="background:#fff"><span>Заплатил всего</span><b>${money(g.total)}</b></div></div>
+  ${ph ? `<div class="grid2"><a class="btn ghost" href="tel:+${ph}">${ICON.phone}Позвонить</a><button class="btn ghost" data-act="write" data-ph="${ph}">${ICON.send}Написать</button></div>` : ''}
+  <h2>Брони</h2>
+  <div class="list">${g.list.sort(byIn).reverse().map(b => `
+    <button class="row" data-act="card" data-id="${b.id}"><div class="grow"><div class="t">${fd(b.inDate)} – ${fd(b.outDate)}</div><div class="s">${esc(cabin(b.cabin).name)} · ${money(b.total)}</div></div>
+    ${debt(b) > 0 ? `<span class="chip c-out">долг ${money(debt(b))}</span>` : '<span class="chip c-free">оплачено</span>'}</button>`).join('')}</div>
+  <button class="btn" data-act="newfor" data-key="${esc(key)}">${ICON.plus}Новая бронь для гостя</button>`);
+}
+
+/* --- Settings --- */
+function openSettings() {
+  openSheet(`
+  <h1 style="font-size:24px">Настройки</h1>
+  <div class="hint">Названия домиков и обычная цена за ночь. Цена подставляется в новую бронь, её всегда можно поменять.</div>
+  <div class="list" id="s_list">${cfg.cabins.map(c => `
+    <div class="card" style="gap:8px;padding:14px">
+      <input data-sid="${c.id}" data-k="name" value="${esc(c.name)}" maxlength="30" aria-label="Название">
+      <input data-sid="${c.id}" data-k="price" type="number" inputmode="numeric" value="${c.price || ''}" placeholder="Цена за ночь, ₽" aria-label="Цена за ночь">
+    </div>`).join('')}</div>
+  <button class="btn ghost" data-act="addcabin">${ICON.plus}Добавить домик</button>
+  <button class="btn" data-act="savesettings">Сохранить</button>
+  <div class="hint" style="text-align:center">${cloudOK ? 'Данные хранятся в вашем аккаунте Telegram и видны только вам — на любом вашем устройстве.' : 'Сейчас приложение открыто не в Telegram: данные сохраняются только в этом браузере.'}</div>`);
+}
+function readSettings() {
+  document.querySelectorAll('#s_list [data-sid]').forEach(inp => {
+    const c = cfg.cabins.find(x => x.id == inp.dataset.sid); if (!c) return;
+    if (inp.dataset.k === 'name') c.name = inp.value.trim() || c.name; else c.price = +inp.value || 0;
+  });
+}
+
+/* ===== Events ===== */
+const ACT = {
+  tab: d => { ui.tab = d.tab; if (!document.getElementById('sheet').hidden) closeSheet(); else render(); },
+  close: () => closeSheet(),
+  settings: () => openSettings(),
+  new: d => openForm(null, { cabin: d.cabin, date: d.date }),
+  card: d => openCard(d.id),
+  guest: d => openGuest(d.key),
+  newfor: d => { const g = guestGroups().find(x => x.key === d.key); openForm(null, {}); if (g) { document.getElementById('f_name').value = g.name; document.getElementById('f_phone').value = g.phone || ''; form.source = 'Повторно'; document.querySelectorAll('#f_source button').forEach(x => x.classList.toggle('on', x.dataset.v === 'Повторно')); } },
+  calmove: d => { ui.calStart = addDays(ui.calStart || today(), +d.n); render(); },
+  caltoday: () => { ui.calStart = null; render(); },
+  monthmove: d => { const [y, m] = (ui.month || today().slice(0, 7)).split('-').map(Number); const x = new Date(y, m - 1 + +d.n, 1); ui.month = x.getFullYear() + '-' + pad(x.getMonth() + 1); render(); },
+  fcabin: (d, el) => {
+    const old = form.cabin; form.cabin = +d.v;
+    el.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === el));
+    const pn = document.getElementById('f_pn');
+    if (!+pn.value || +pn.value === +cabin(old).price) { pn.value = cabin(form.cabin).price || ''; recalc(); }
+  },
+  fsource: (d, el) => { const on = !el.classList.contains('on'); el.parentNode.querySelectorAll('button').forEach(x => x.classList.remove('on')); el.classList.toggle('on', on); form.source = on ? d.v : ''; },
+  pick: (d, el) => el.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === el)),
+  saveform: () => saveForm(),
+  edit: d => openForm(bookings.find(x => x.id === d.id)),
+  delbooking: async d => {
+    const b = bookings.find(x => x.id === d.id);
+    if (await confirmBox(`Удалить бронь «${b.name}» вместе с оплатами?`)) { await removeBooking(d.id); haptic(); toast('Бронь удалена'); closeSheet(); }
+  },
+  showpay: () => { document.getElementById('payform').style.display = 'flex'; document.getElementById('paybtn').style.display = 'none'; document.getElementById('p_amount').focus(); },
+  savepay: async d => {
+    const b = bookings.find(x => x.id === d.id); const amount = +val('p_amount');
+    if (!(amount > 0)) { toast('Впишите сумму'); haptic('error'); return; }
+    b.payments = (b.payments || []).concat({ id: uid(), amount, method: document.querySelector('#p_method .on').dataset.v, date: val('p_date') || today(), note: val('p_note').trim() });
+    await saveBooking(b); haptic(); toast('Оплата записана'); openCard(b.id);
+  },
+  delpay: async d => {
+    const b = bookings.find(x => x.id === d.id);
+    if (await confirmBox('Удалить эту оплату?')) { b.payments = b.payments.filter(p => p.id !== d.pid); await saveBooking(b); openCard(b.id); }
+  },
+  write: d => { const url = 'https://t.me/+' + d.ph; if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank'); },
+  addcabin: () => { readSettings(); const id = Math.max(0, ...cfg.cabins.map(c => c.id)) + 1; cfg.cabins.push({ id, name: 'Домик ' + id, price: 0 }); openSettings(); },
+  savesettings: async () => { readSettings(); await saveCfg(); haptic(); toast('Сохранено'); closeSheet(); }
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const f = ACT[el.dataset.act]; if (!f) return;
+  e.preventDefault(); f(el.dataset, el);
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { ui.q = e.target.value; renderGuestList(); }
+  if (['f_in', 'f_out', 'f_pn'].includes(e.target.id)) {
+    if (e.target.id === 'f_in' && val('f_out') <= val('f_in')) document.getElementById('f_out').value = addDays(val('f_in'), 1);
+    recalc();
+  }
+  if (e.target.id === 'f_total') form.totalTouched = true;
+});
+
+load().then(render);
+</script>
+</body>
+</html>
