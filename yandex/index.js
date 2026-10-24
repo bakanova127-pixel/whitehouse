@@ -82,7 +82,12 @@ async function setup(key) {
   try { await saveData(await loadData()); } catch (e) { return 'Нет доступа к бакету: ' + e.message + '\nПроверьте имя бакета и роль storage.editor у сервисного аккаунта'; }
   const log = [];
   try { await fetch(TG + 'getMe'); } catch (e) { return 'Хранилище работает ✅\nНо облако не может достучаться до Telegram (' + TG_BASE + ').\nНужен посредник: задайте переменную TG_API.'; }
-  log.push('Webhook: ' + JSON.stringify(await tg('setWebhook', { url: SELF_URL, secret_token: SECRET, drop_pending_updates: true, allowed_updates: ['message'] })));
+  const before = await tg('getWebhookInfo', {});
+  if (before && before.result && before.result.last_error_message) log.push('Прошлая ошибка Telegram: ' + before.result.last_error_message);
+  const fidm = SELF_URL.match(/\/([a-z0-9]+)$/);
+  const HOOK = process.env.TG_API && fidm ? TG_BASE + '/hook/' + fidm[1] : SELF_URL;
+  log.push('Адрес для сообщений: ' + HOOK);
+  log.push('Webhook: ' + JSON.stringify(await tg('setWebhook', { url: HOOK, secret_token: SECRET, drop_pending_updates: true, allowed_updates: ['message'] })));
   await tg('setMyCommands', { commands: [
     { command: 'start', description: 'Открыть меню' },
     { command: 'today', description: 'Что сегодня по домикам' },
