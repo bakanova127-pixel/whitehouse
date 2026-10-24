@@ -20,6 +20,7 @@ const CHECKOUT_DAYS = [1];    // за сколько дней до выезда 
 const TG_BASE = (process.env.TG_API || 'https://api.telegram.org').replace(/\/+$/, ''); // адрес Telegram API или посредника
 const TG = TG_BASE + '/bot' + TOKEN + '/';
 const SECRET = crypto.createHash('sha256').update('wh:' + TOKEN).digest('hex').slice(0, 48);
+const CRON_KEY = crypto.createHash('sha256').update('cron:' + TOKEN).digest('hex').slice(0, 32);
 const BTN = { today: '🏡 Сегодня', week: '📅 Заезды на неделю', debts: '💰 Кто должен', tasks: '🛠 Дела' };
 const MONG = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -46,6 +47,11 @@ module.exports.handler = async function (event, context) {
 
   if (method === 'GET') {
     if (q.setup) return reply(200, await setup(q.setup), 'text/plain; charset=utf-8');
+    if (q.cron) {
+      if (!TOKEN || q.cron !== CRON_KEY) return reply(403, 'forbidden');
+      await dailyReminders();
+      return reply(200, 'ok');
+    }
     return reply(200, 'Бот «Мои домики» работает', 'text/plain; charset=utf-8');
   }
 
@@ -89,6 +95,9 @@ async function setup(key) {
   await tg('setMyShortDescription', { short_description: 'Брони, гости, оплаты, дела и напоминания' });
   await tg('setMyDescription', { description: 'Учёт домиков: кто когда заезжает, в какой домик, кто сколько оплатил. Напоминаю о заездах и выездах. Можно писать и присылать голосовые.' });
   log.push('Готово! Теперь откройте бота и нажмите /start');
+  log.push('');
+  log.push('Ссылка для ежедневных напоминаний (CRON_URL):');
+  log.push(SELF_URL + '?cron=' + CRON_KEY);
   return log.join('\n');
 }
 
