@@ -154,19 +154,62 @@ async function load() {
       }
     } catch (e) { toast('Не получилось загрузить данные из Telegram'); }
   }
+  if (serverOK) {
+    await flush();
+    const r = await call({ action: 'load' });
+    if (r && r.ok) {
+      if (!r.bookings.length && bookings.length) await call({ action: 'import', cfg, bookings });
+      else { bookings = r.bookings; if (r.cfg) cfg = r.cfg; else await call({ action: 'cfg', cfg }); }
+      synced = true;
+    } else if (r && r.error === 'forbidden') toast('У вас нет доступа к этим данным');
+    else if (r && r.error === 'auth') toast('Закройте и откройте приложение заново');
+    else toast('Нет связи — показываю сохранённое на телефоне');
+  }
   backup();
 }
+
+/* ===== Server (Google) sync ===== */
+const QS = new URLSearchParams(location.search);
+let API_URL = QS.get('api') || '';
+try { if (API_URL) localStorage.setItem('domiki_api', API_URL); else API_URL = localStorage.getItem('domiki_api') || ''; } catch (e) {}
+const OPEN_B = QS.get('b') || '';
+const serverOK = !!(API_URL && tg && tg.initData);
+let synced = false, flushing = false;
+const getQ = () => { try { return JSON.parse(localStorage.getItem('domiki_q') || '[]'); } catch (e) { return []; } };
+const setQ = q => { try { localStorage.setItem('domiki_q', JSON.stringify(q)); } catch (e) {} };
+async function call(body) {
+  try {
+    const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ ...body, initData: tg.initData }) });
+    return await r.json();
+  } catch (e) { return null; }
+}
+async function flush() {
+  if (!serverOK || flushing) return;
+  flushing = true;
+  try {
+    let q = getQ();
+    while (q.length) {
+      const r = await call(q[0]);
+      if (!r) { toast('Нет связи — сохранено на телефоне, отправлю позже'); break; }
+      q = getQ(); q.shift(); setQ(q);
+    }
+  } finally { flushing = false; }
+}
+function enqueue(op) { if (!serverOK) return; const q = getQ(); q.push(op); setQ(q); flush(); }
+
 async function saveBooking(b) {
   const i = bookings.findIndex(x => x.id === b.id);
   if (i >= 0) bookings[i] = b; else bookings.push(b);
   backup();
-  if (cloudOK) { try { await cs.set('b_' + b.id, JSON.stringify(b)); } catch (e) { toast('Сохранено только на этом телефоне'); } }
+  enqueue({ action: 'save', booking: b });
+  if (cloudOK) { try { await cs.set('b_' + b.id, JSON.stringify(b)); } catch (e) { if (!serverOK) toast('Сохранено только на этом телефоне'); } }
 }
 async function removeBooking(id) {
   bookings = bookings.filter(b => b.id !== id); backup();
+  enqueue({ action: 'delete', id });
   if (cloudOK) { try { await cs.del('b_' + id); } catch (e) {} }
 }
-async function saveCfg() { backup(); if (cloudOK) { try { await cs.set('cfg', JSON.stringify(cfg)); } catch (e) {} } }
+async function saveCfg() { backup(); enqueue({ action: 'cfg', cfg }); if (cloudOK) { try { await cs.set('cfg', JSON.stringify(cfg)); } catch (e) {} } }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 /* ===== Helpers ===== */
@@ -535,7 +578,7 @@ function openSettings() {
     </div>`).join('')}</div>
   <button class="btn ghost" data-act="addcabin">${ICON.plus}Добавить домик</button>
   <button class="btn" data-act="savesettings">Сохранить</button>
-  <div class="hint" style="text-align:center">${cloudOK ? 'Данные хранятся в вашем аккаунте Telegram и видны только вам — на любом вашем устройстве.' : 'Сейчас приложение открыто не в Telegram: данные сохраняются только в этом браузере.'}</div>`);
+  <div class="hint" style="text-align:center">${serverOK ? 'Брони сохраняются в Google-таблицу, бот присылает напоминания о заездах.' : cloudOK ?'Данные хранятся в вашем аккаунте Telegram и видны только вам — на любом вашем устройстве.' : 'Сейчас приложение открыто не в Telegram: данные сохраняются только в этом браузере.'}</div>`);
 }
 function readSettings() {
   document.querySelectorAll('#s_list [data-sid]').forEach(inp => {
@@ -599,7 +642,7 @@ document.addEventListener('input', e => {
   if (e.target.id === 'f_total') form.totalTouched = true;
 });
 
-load().then(render);
+load().then(() => { render(); if (OPEN_B && bookings.some(b => b.id === OPEN_B)) openCard(OPEN_B); });
 </script>
 </body>
 </html>
