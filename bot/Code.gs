@@ -7,6 +7,7 @@
 const TOKEN = 'ВСТАВЬ_СЮДА_ТОКЕН_БОТА';                       // токен из @BotFather
 const APP_URL = 'https://bakanova127-pixel.github.io/whitehouse/'; // адрес приложения
 const SCRIPT_URL = '';  // ссылка веб-приложения (появится после «Развернуть»)
+const RELAY_URL = '';   // адрес посредника Cloudflare, например https://tg-relay-domiki.xxx.workers.dev
 
 // ===== 2. МОЖНО МЕНЯТЬ =====
 const TZ = 'Europe/Moscow';
@@ -16,6 +17,10 @@ const CHECKOUT_DAYS = [1];   // за сколько дней до выезда �
 
 // =================================================================
 const API = 'https://api.telegram.org/bot' + TOKEN + '/';
+const RELAY = String(RELAY_URL || '').trim().replace(/\/+$/, '');
+function hex(bytes) { return bytes.map(b => ('0' + ((b + 256) % 256).toString(16)).slice(-2)).join(''); }
+function sha(s) { return hex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)); }
+const SECRET = sha('wh:' + TOKEN).slice(0, 48);
 const P = PropertiesService.getScriptProperties();
 const HEAD = ['id', 'Домик', 'Гость', 'Телефон', 'Заезд', 'Время заезда', 'Выезд', 'Время выезда',
   'Взрослых', 'Детей', 'Цена за ночь', 'Итого', 'Оплачено', 'Долг', 'Откуда', 'Заметка', 'Создано', 'data'];
@@ -32,13 +37,16 @@ function setup() {
   P.setProperty('SCRIPT_URL', url);
   const sh = sheet();
 
-  Logger.log('Webhook: ' + JSON.stringify(tg('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message'] })));
+  const hook = RELAY ? RELAY + '/tg' : url;
+  Logger.log('Адрес для сообщений: ' + hook);
+  Logger.log('Webhook: ' + JSON.stringify(tg('setWebhook', { url: hook, secret_token: SECRET, drop_pending_updates: true, allowed_updates: ['message'] })));
   tg('setMyCommands', { commands: [
     { command: 'start', description: 'Открыть меню' },
     { command: 'today', description: 'Что сегодня по домикам' },
     { command: 'week', description: 'Заезды на неделю' },
     { command: 'debts', description: 'Кто должен' },
-    { command: 'tasks', description: 'Дела по домикам' }
+    { command: 'tasks', description: 'Дела по домикам' },
+    { command: 'export', description: 'Таблица со всеми бронями' }
   ] });
   tg('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Домики', web_app: { url: appUrl('') } } });
   tg('setMyShortDescription', { short_description: 'Брони, гости, оплаты и напоминания о заездах' });
@@ -47,7 +55,12 @@ function setup() {
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'dailyReminders') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('dailyReminders').timeBased().atHour(REMIND_HOUR).everyDays(1).inTimezone(TZ).create();
 
-  Logger.log('Готово! Таблица с бронями: ' + sh.getParent().getUrl());
+  Logger.log('Таблица с бронями: ' + sh.getParent().getUrl());
+  if (RELAY) {
+    const ping = UrlFetchApp.fetch(RELAY + '/ping', { muteHttpExceptions: true });
+    Logger.log('Посредник: ' + (ping.getResponseCode() === 200 ? 'на связи ✅' : 'НЕ отвечает (' + ping.getResponseCode() + ') — проверьте RELAY_URL и код воркера'));
+  }
+  Logger.log('Готово! Теперь откройте бота и нажмите /start');
 }
 
 /* Пришлёт напоминание о ближайшем будущем заезде прямо сейчас — для проверки */
@@ -125,6 +138,7 @@ function doPost(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return; }
   if (body.update_id !== undefined) {
+    if (RELAY && body._s !== SECRET) return;
     const cache = CacheService.getScriptCache(), key = 'u' + body.update_id;
     if (cache.get(key)) return;
     cache.put(key, '1', 21600);
@@ -155,11 +169,24 @@ function handleUpdate(u) {
     send(nid, 'Вам открыли доступ к боту «Мои домики». Нажмите /start');
     return send(id, 'Доступ открыт. Этот человек тоже будет получать напоминания.');
   }
+  if (cmd === '/remove') {
+    const nid = +text.split(/\s+/)[1];
+    if (!nid) return send(id, 'Напишите так: <code>/remove 123456789</code>\nСписок всех, у кого есть доступ: /users');
+    if (nid === owners[0]) return send(id, 'Главного владельца бота убрать нельзя.');
+    if (owners.indexOf(nid) < 0) return send(id, 'У этого человека и так нет доступа.');
+    setOwners(owners.filter(x => x !== nid));
+    send(nid, 'Доступ к боту «Мои домики» закрыт. Спасибо, что помогли проверить 🙂');
+    return send(id, 'Готово, доступ убран. Напоминания этому человеку больше не придут.');
+  }
+  if (cmd === '/users') {
+    return send(id, '👥 Доступ к боту:\n' + owners.map((x, i) => '• <code>' + x + '</code>' + (i === 0 ? ' — владелец' : '') + (x === id ? ' (вы)' : '')).join('\n') + (owners.length > 1 ? '\n\nУбрать: <code>/remove ID</code>' : ''));
+  }
+  if (cmd === '/export') return send(id, '📊 Все брони и дела — в Google-таблице:\n' + sheet().getParent().getUrl());
   if (cmd === '/start') {
     send(id, '👋 Привет' + (msg.from.first_name ? ', ' + esc(msg.from.first_name) : '') + '!\n\n' +
       'Здесь всё про домики: брони, гости, оплаты и дела.\n' +
       '⏰ О каждом заезде напомню за 2 дня и за день, о выезде — за день.\n\n' +
-      '✍️ Можно просто написать или надиктовать мне (микрофон на клавиатуре):\n' +
+      '🎤 Можно прислать голосовое или просто написать, например:\n' +
       '• <i>С 5 по 16 ноября заезжает Александр в третий домик, предоплата 5 тысяч</i>\n' +
       '• <i>Починить кран в третьем доме</i>\n\n' +
       'Приложение открывается кнопкой ниже или кнопкой «Домики» слева от поля ввода.',
@@ -170,8 +197,10 @@ function handleUpdate(u) {
   if (cmd === '/week' || text === BTN.week) return send(id, weekText(), openKb());
   if (cmd === '/debts' || text === BTN.debts) return send(id, debtsText(), openKb());
   if (cmd === '/tasks' || text === BTN.tasks) return send(id, tasksText(), openKb('&tab=tasks'));
-  if (msg.voice || msg.audio || msg.video_note) {
-    return send(id, '🎤 Голосовые я пока не распознаю.\nНажмите на микрофон <b>на клавиатуре</b> телефона и продиктуйте — получится текст, его я пойму. Например:\n<i>С 5 по 16 ноября заезжает Александр в третий домик</i>', mainKb());
+  if (msg.voice || msg.audio) {
+    const heard = transcribe(msg.voice || msg.audio);
+    if (heard) { send(id, '🎤 Услышала: «' + esc(heard) + '»'); return handleFreeText(id, heard); }
+    return send(id, '🎤 Не получилось распознать голосовое. Попробуйте ещё раз или продиктуйте через микрофон на клавиатуре — получится текст.', mainKb());
   }
   if (text && text[0] !== '/') return handleFreeText(id, text);
   send(id, 'Выберите кнопку внизу 👇', mainKb());
@@ -264,6 +293,18 @@ function debtsText() {
   ).join('\n');
 }
 function debtMark(b) { const d = debt(b); return d > 0 ? ' · ❗️долг ' + money(d) : ''; }
+
+/* ---------- Голосовые (распознаёт посредник Cloudflare) ---------- */
+function transcribe(v) {
+  if (!RELAY || !v || (v.duration || 0) > 60) return '';
+  try {
+    const f = tg('getFile', { file_id: v.file_id });
+    const audio = UrlFetchApp.fetch('https://api.telegram.org/file/bot' + TOKEN + '/' + f.result.file_path).getBlob().getBytes();
+    const r = UrlFetchApp.fetch(RELAY + '/stt', { method: 'post', contentType: 'application/octet-stream', payload: audio, headers: { 'x-key': sha('stt:' + (P.getProperty('SCRIPT_URL') || SCRIPT_URL)) }, muteHttpExceptions: true });
+    const j = JSON.parse(r.getContentText());
+    return String(j.text || '').trim();
+  } catch (e) { console.error(e); return ''; }
+}
 
 /* ---------- API для приложения ---------- */
 function appApi(body) {
