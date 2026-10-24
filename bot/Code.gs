@@ -11,9 +11,11 @@ const RELAY_URL = '';   // адрес посредника Cloudflare, напр�
 
 // ===== 2. МОЖНО МЕНЯТЬ =====
 const TZ = 'Europe/Moscow';
-const REMIND_HOUR = 10;      // во сколько присылать напоминания (примерно, в течение часа)
-const REMIND_DAYS = [2, 1];  // за сколько дней до заезда напоминать. Добавьте 0 — будет и в день заезда
-const CHECKOUT_DAYS = [1];   // за сколько дней до выезда напоминать
+// Напоминания: утром (10:00) — о заездах в этот день; вечером (17:00) — о завтрашних заездах и выездах
+const SCHEDULE = {
+  morning: { hour: 10, checkin: [0], checkout: [] },
+  evening: { hour: 17, checkin: [1], checkout: [1] }
+};
 
 // =================================================================
 const API = 'https://api.telegram.org/bot' + TOKEN + '/';
@@ -53,7 +55,8 @@ function setup() {
   tg('setMyDescription', { description: 'Учёт домиков: кто когда заезжает, в какой домик, кто сколько оплатил. Бот сам напомнит о заездах за 2 дня и за день.' });
 
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'dailyReminders') ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('dailyReminders').timeBased().atHour(REMIND_HOUR).everyDays(1).inTimezone(TZ).create();
+  ScriptApp.newTrigger('dailyReminders').timeBased().atHour(SCHEDULE.morning.hour).nearMinute(0).everyDays(1).inTimezone(TZ).create();
+  ScriptApp.newTrigger('dailyReminders').timeBased().atHour(SCHEDULE.evening.hour).nearMinute(0).everyDays(1).inTimezone(TZ).create();
 
   Logger.log('Таблица с бронями: ' + sh.getParent().getUrl());
   if (RELAY) {
@@ -77,14 +80,15 @@ function dailyReminders() {
   const owners = getOwners();
   if (!owners.length) return;
   const t = todayStr();
-  if (P.getProperty('LAST_REMIND') === t) return;
-  P.setProperty('LAST_REMIND', t);
+  const slot = +Utilities.formatDate(new Date(), TZ, 'H') < 14 ? 'morning' : 'evening', plan = SCHEDULE[slot];
+  if (P.getProperty('LAST_REMIND') === t + ':' + slot) return;
+  P.setProperty('LAST_REMIND', t + ':' + slot);
   const bs = allBookings();
-  REMIND_DAYS.forEach(n => {
+  plan.checkin.forEach(n => {
     const d = addDays(t, n);
     bs.filter(b => b.inDate === d).forEach(b => owners.forEach(o => sendReminder(o, b, n)));
   });
-  CHECKOUT_DAYS.forEach(n => {
+  plan.checkout.forEach(n => {
     const d = addDays(t, n);
     bs.filter(b => b.outDate === d).forEach(b => owners.forEach(o => sendCheckout(o, b, n, bs)));
   });

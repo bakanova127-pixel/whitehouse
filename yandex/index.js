@@ -14,8 +14,13 @@ const TOKEN = process.env.BOT_TOKEN || '';
 const BUCKET = process.env.BUCKET || '';
 const APP_URL = process.env.APP_URL || 'https://bakanova127-pixel.github.io/whitehouse/';
 const TZ = 'Europe/Moscow';
-const REMIND_DAYS = [2, 1];   // за сколько дней до заезда напоминать (добавьте 0 — и в день заезда)
-const CHECKOUT_DAYS = [1];    // за сколько дней до выезда напоминать
+// Расписание напоминаний (время московское). Бот запускается в 10:00 и в 17:00.
+//  morning — запуск в 10:00, evening — запуск в 17:00
+//  checkin: [0] — в день заезда, [1] — за день; checkout: [1] — за день до выезда
+const SCHEDULE = {
+  morning: { checkin: [0], checkout: [] },
+  evening: { checkin: [1], checkout: [1] }
+};
 
 const TG_BASE = (process.env.TG_API || 'https://api.telegram.org').replace(/\/+$/, ''); // адрес Telegram API или посредника
 const TG = TG_BASE + '/bot' + TOKEN + '/';
@@ -337,15 +342,17 @@ async function sendExport(id, d) {
 /* ================= Напоминания (таймер) ================= */
 async function dailyReminders() {
   const d = await loadData(), t = todayStr();
-  if (!d.owners.length || d.lastRemind === t) return;
-  d.lastRemind = t;
+  const hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(new Date());
+  const slot = hour < 14 ? 'morning' : 'evening', mark = t + ':' + slot, plan = SCHEDULE[slot];
+  if (!d.owners.length || d.lastRemind === mark) return;
+  d.lastRemind = mark;
   await saveData(d);
-  try { await saveData(d, 'backup/' + t + '.json'); } catch (e) {}
-  for (const n of REMIND_DAYS) {
+  if (slot === 'morning') { try { await saveData(d, 'backup/' + t + '.json'); } catch (e) {} }
+  for (const n of plan.checkin) {
     const day = addDays(t, n);
     for (const b of d.bookings.filter(x => x.inDate === day)) for (const o of d.owners) await sendReminder(o, b, n, d);
   }
-  for (const n of CHECKOUT_DAYS) {
+  for (const n of plan.checkout) {
     const day = addDays(t, n);
     for (const b of d.bookings.filter(x => x.outDate === day)) for (const o of d.owners) await sendCheckout(o, b, n, d);
   }
