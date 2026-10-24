@@ -17,7 +17,8 @@ const TZ = 'Europe/Moscow';
 const REMIND_DAYS = [2, 1];   // за сколько дней до заезда напоминать (добавьте 0 — и в день заезда)
 const CHECKOUT_DAYS = [1];    // за сколько дней до выезда напоминать
 
-const TG = 'https://api.telegram.org/bot' + TOKEN + '/';
+const TG_BASE = (process.env.TG_API || 'https://api.telegram.org').replace(/\/+$/, ''); // адрес Telegram API или посредника
+const TG = TG_BASE + '/bot' + TOKEN + '/';
 const SECRET = crypto.createHash('sha256').update('wh:' + TOKEN).digest('hex').slice(0, 48);
 const BTN = { today: '🏡 Сегодня', week: '📅 Заезды на неделю', debts: '💰 Кто должен', tasks: '🛠 Дела' };
 const MONG = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -74,6 +75,7 @@ async function setup(key) {
   if (!IAM) return 'У функции нет сервисного аккаунта — назначьте его в настройках версии';
   try { await saveData(await loadData()); } catch (e) { return 'Нет доступа к бакету: ' + e.message + '\nПроверьте имя бакета и роль storage.editor у сервисного аккаунта'; }
   const log = [];
+  try { await fetch(TG + 'getMe'); } catch (e) { return 'Хранилище работает ✅\nНо облако не может достучаться до Telegram (' + TG_BASE + ').\nНужен посредник: задайте переменную TG_API.'; }
   log.push('Webhook: ' + JSON.stringify(await tg('setWebhook', { url: SELF_URL, secret_token: SECRET, drop_pending_updates: true, allowed_updates: ['message'] })));
   await tg('setMyCommands', { commands: [
     { command: 'start', description: 'Открыть меню' },
@@ -189,7 +191,7 @@ async function handleVoice(id, v, d) {
   let text = '';
   try {
     const f = await tg('getFile', { file_id: v.file_id });
-    const audio = Buffer.from(await (await fetch('https://api.telegram.org/file/bot' + TOKEN + '/' + f.result.file_path)).arrayBuffer());
+    const audio = Buffer.from(await (await fetch(TG_BASE + '/file/bot' + TOKEN + '/' + f.result.file_path)).arrayBuffer());
     const r = await fetch('https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?lang=ru-RU&format=oggopus', {
       method: 'POST', headers: { Authorization: 'Bearer ' + IAM }, body: audio
     });
