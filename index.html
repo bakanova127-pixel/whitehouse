@@ -17,7 +17,7 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Manrope',s
 button{font:inherit;color:inherit}
 #app{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:calc(86px + env(safe-area-inset-bottom))}
 main{padding:20px 16px 24px;display:flex;flex-direction:column;gap:16px}
-nav#tabs{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:4px 0 calc(6px + env(safe-area-inset-bottom));z-index:5}
+nav#tabs{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:4px 0 calc(6px + env(safe-area-inset-bottom));z-index:5}
 nav#tabs button{background:none;border:0;font-size:11px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;min-height:54px;cursor:pointer}
 nav#tabs button.on{color:var(--accent);font-weight:800}
 .head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -102,6 +102,25 @@ textarea{min-height:72px;resize:vertical}
 .shead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 #toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#17231C;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;z-index:40;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
+/* quick input + tasks */
+.quick{gap:10px}
+.qline{display:flex;gap:8px;align-items:stretch}
+.qline textarea{min-height:48px;height:48px;resize:none;padding:12px}
+.qline .iconbtn{background:var(--accent);color:#fff;height:48px;width:48px}
+.qline .iconbtn.rec{background:#852A20}
+.qres{background:var(--bg);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.qres .kvline{display:flex;justify-content:space-between;gap:10px;font-size:14px}
+.qres .kvline span{color:var(--muted)}
+.qres .miss{color:#852A20;font-weight:600}
+.task{background:#fff;border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.chk{width:30px;height:30px;border-radius:9px;border:2px solid #9DB0A3;background:#fff;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;padding:0}
+.chk.on{background:var(--accent);border-color:var(--accent)}
+.task.done .t{text-decoration:line-through;color:var(--muted);font-weight:600}
+.imp{background:#F4DEDA;color:#852A20}
+.seg.scroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.seg.scroll::-webkit-scrollbar{display:none}
+.seg.scroll button{flex:none}
+.linkbtn{background:none;border:0;color:var(--accent);font-weight:700;font-size:14px;cursor:pointer;padding:8px 0;text-align:left}
 </style>
 </head>
 <body>
@@ -110,6 +129,7 @@ textarea{min-height:72px;resize:vertical}
   <nav id="tabs">
     <button data-act="tab" data-tab="today"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Сегодня</button>
     <button data-act="tab" data-tab="cal"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Календарь</button>
+    <button data-act="tab" data-tab="tasks"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8l1.5 1.5L12 7M8 14l1.5 1.5L12 13M14.5 8.5H17M14.5 14.5H17"/></svg>Дела</button>
     <button data-act="tab" data-tab="guests"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"/></svg>Гости</button>
     <button data-act="tab" data-tab="money"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20M16 15h2"/></svg>Деньги</button>
   </nav>
@@ -124,12 +144,14 @@ const ver = v => !!(tg && tg.isVersionAtLeast && tg.isVersionAtLeast(v));
 if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#F3F5F1'); tg.setBackgroundColor('#F3F5F1'); } catch (e) {} }
 const cloudOK = !!(tg && tg.initData && tg.CloudStorage && ver('6.9'));
 const haptic = t => { try { tg.HapticFeedback.notificationOccurred(t || 'success'); } catch (e) {} };
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
 /* ===== Data ===== */
 const LS = 'domiki_v1';
 let cfg = { cabins: [1, 2, 3, 4].map(i => ({ id: i, name: 'Домик ' + i, price: 0 })) };
 let bookings = [];
-let ui = { tab: 'today', calStart: null, month: null, q: '' };
+let tasks = [];
+let ui = { tab: 'today', calStart: null, month: null, q: '', tf: 'all', showDone: false, parsed: null, qtext: '' };
 
 const cs = {
   keys: () => new Promise((res, rej) => tg.CloudStorage.getKeys((e, k) => e ? rej(e) : res(k || []))),
@@ -137,9 +159,9 @@ const cs = {
   set: (k, v) => new Promise((res, rej) => tg.CloudStorage.setItem(k, v, (e, ok) => e ? rej(e) : res(ok))),
   del: k => new Promise((res, rej) => tg.CloudStorage.removeItem(k, (e, ok) => e ? rej(e) : res(ok)))
 };
-function backup() { try { localStorage.setItem(LS, JSON.stringify({ cfg, bookings })); } catch (e) {} }
+function backup() { try { localStorage.setItem(LS, JSON.stringify({ cfg, bookings, tasks })); } catch (e) {} }
 async function load() {
-  try { const raw = JSON.parse(localStorage.getItem(LS) || 'null'); if (raw) { cfg = raw.cfg || cfg; bookings = raw.bookings || []; } } catch (e) {}
+  try { const raw = JSON.parse(localStorage.getItem(LS) || 'null'); if (raw) { cfg = raw.cfg || cfg; bookings = raw.bookings || []; tasks = raw.tasks || []; } } catch (e) {}
   if (cloudOK) {
     try {
       const keys = await cs.keys();
@@ -148,6 +170,7 @@ async function load() {
         for (let i = 0; i < keys.length; i += 50) Object.assign(vals, await cs.get(keys.slice(i, i + 50)));
         if (vals.cfg) cfg = JSON.parse(vals.cfg);
         bookings = keys.filter(k => k.startsWith('b_')).map(k => { try { return JSON.parse(vals[k]); } catch (e) { return null; } }).filter(Boolean);
+        tasks = keys.filter(k => k.startsWith('t_')).map(k => { try { return JSON.parse(vals[k]); } catch (e) { return null; } }).filter(Boolean);
       } else if (bookings.length) {
         await cs.set('cfg', JSON.stringify(cfg));
         for (const b of bookings) await cs.set('b_' + b.id, JSON.stringify(b));
@@ -158,8 +181,9 @@ async function load() {
     await flush();
     const r = await call({ action: 'load' });
     if (r && r.ok) {
-      if (!r.bookings.length && bookings.length) await call({ action: 'import', cfg, bookings });
-      else { bookings = r.bookings; if (r.cfg) cfg = r.cfg; else await call({ action: 'cfg', cfg }); }
+      const rt = r.tasks || [];
+      if (!r.bookings.length && !rt.length && (bookings.length || tasks.length)) await call({ action: 'import', cfg, bookings, tasks });
+      else { bookings = r.bookings; tasks = rt; if (r.cfg) cfg = r.cfg; else await call({ action: 'cfg', cfg }); }
       synced = true;
     } else if (r && r.error === 'forbidden') toast('У вас нет доступа к этим данным');
     else if (r && r.error === 'auth') toast('Закройте и откройте приложение заново');
@@ -209,6 +233,18 @@ async function removeBooking(id) {
   enqueue({ action: 'delete', id });
   if (cloudOK) { try { await cs.del('b_' + id); } catch (e) {} }
 }
+async function saveTask(t) {
+  const i = tasks.findIndex(x => x.id === t.id);
+  if (i >= 0) tasks[i] = t; else tasks.push(t);
+  backup();
+  enqueue({ action: 'saveTask', task: t });
+  if (cloudOK) { try { await cs.set('t_' + t.id, JSON.stringify(t)); } catch (e) {} }
+}
+async function removeTask(id) {
+  tasks = tasks.filter(t => t.id !== id); backup();
+  enqueue({ action: 'deleteTask', id });
+  if (cloudOK) { try { await cs.del('t_' + id); } catch (e) {} }
+}
 async function saveCfg() { backup(); enqueue({ action: 'cfg', cfg }); if (cloudOK) { try { await cs.set('cfg', JSON.stringify(cfg)); } catch (e) {} } }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -239,6 +275,8 @@ function confirmBox(text) {
   return new Promise(res => { if (tg && ver('6.2')) tg.showConfirm(text, ok => res(ok)); else res(window.confirm(text)); });
 }
 const ICON = {
+  mic: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   left: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
@@ -260,12 +298,252 @@ function cabinStatus(c, t) {
 }
 
 /* ===== Views ===== */
-function render() {
+function render(keep) {
+  const y = window.scrollY;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
   const v = document.getElementById('view');
-  v.innerHTML = ({ today: vToday, cal: vCal, guests: vGuests, money: vMoney })[ui.tab]();
+  v.innerHTML = ({ today: vToday, cal: vCal, tasks: vTasks, guests: vGuests, money: vMoney })[ui.tab]();
   if (ui.tab === 'guests') renderGuestList();
-  window.scrollTo(0, 0);
+  if (ui.tab === 'today') renderQuick();
+  window.scrollTo(0, keep ? y : 0);
+}
+
+/* ===== Tasks ===== */
+const openTasks = cab => tasks.filter(x => !x.done && (cab == null || x.cabin == cab)).sort((a, b) => ((+!!b.important) - (+!!a.important)) || ((a.created || '') < (b.created || '') ? -1 : 1));
+const tcabName = id => +id ? cabin(id).name : 'Общее';
+function taskRow(x) {
+  return `<div class="task${x.done ? ' done' : ''}">
+    <button class="chk${x.done ? ' on' : ''}" data-act="toggletask" data-id="${x.id}" aria-label="${x.done ? 'Вернуть в дела' : 'Отметить сделанным'}">${x.done ? ICON.check : ''}</button>
+    <div class="grow"><div class="t" style="white-space:normal">${esc(x.text)}</div><div class="s">${esc(tcabName(x.cabin))}${x.done && x.doneDate ? ' · сделано ' + fd(x.doneDate) : ''}</div></div>
+    ${x.important && !x.done ? '<span class="chip imp">важно</span>' : ''}
+    ${x.done ? `<button class="x" data-act="deltask" data-id="${x.id}" aria-label="Удалить дело">✕</button>` : ''}
+  </div>`;
+}
+function vTasks() {
+  const f = ui.tf;
+  const match = x => f === 'all' || String(+x.cabin || 0) === f;
+  const open = openTasks().filter(match);
+  const done = tasks.filter(x => x.done && match(x)).sort((a, b) => (a.doneDate || '') < (b.doneDate || '') ? 1 : -1);
+  const places = [['0', 'Общее']].concat(cfg.cabins.map(c => [String(c.id), c.name]));
+  const cnt = v => openTasks().filter(x => v === 'all' || String(+x.cabin || 0) === v).length;
+  return `<div><div class="sub">Что сделать по домикам</div><h1>Дела</h1></div>
+  <div class="card" style="gap:10px">
+    <label class="t" for="t_text">Новое дело</label>
+    <textarea id="t_text" rows="2" placeholder="Например: починить кран, купить простыни" maxlength="200"></textarea>
+    <div class="seg scroll" id="t_cabin">${places.map(([v, n]) => `<button type="button" data-act="pick" data-v="${v}" class="${v === (f === 'all' ? '0' : f) ? 'on' : ''}">${esc(n)}</button>`).join('')}</div>
+    <div class="seg"><button type="button" id="t_imp" data-act="toggleimp">Важно</button></div>
+    <button class="btn" data-act="addtask">${ICON.plus}Добавить дело</button>
+  </div>
+  <div class="seg scroll">${[['all', 'Все']].concat(places).map(([v, n]) => `<button type="button" data-act="tfilter" data-v="${v}" class="${v === f ? 'on' : ''}">${esc(v === '0' ? 'Общие' : n)}${cnt(v) ? ' · ' + cnt(v) : ''}</button>`).join('')}</div>
+  <div class="list">${open.map(taskRow).join('') || '<div class="empty">Открытых дел нет</div>'}</div>
+  ${done.length ? `<button class="linkbtn" data-act="showdone">${ui.showDone ? 'Скрыть сделанные' : 'Сделано (' + done.length + ')'}</button>${ui.showDone ? '<div class="list">' + done.map(taskRow).join('') + '</div>' : ''}` : ''}`;
+}
+
+/* ===== Quick input (voice / text) ===== */
+function renderQuick() {
+  const box = document.getElementById('qres'); if (!box) return;
+  const r = ui.parsed;
+  if (!r || !r.kind) { box.innerHTML = ''; return; }
+  const line = (k, v, miss) => `<div class="kvline"><span>${k}</span>${v ? '<b>' + esc(v) + '</b>' : `<b class="miss">${miss}</b>`}</div>`;
+  if (r.kind === 'booking') {
+    const b = r.booking, n = b.inDate && b.outDate ? diff(b.inDate, b.outDate) : 0;
+    box.innerHTML = `<div class="qres"><div class="t">Новая бронь</div>
+      ${line('Гость', b.name, 'имя не распознано')}
+      ${line('Домик', b.cabin ? cabin(b.cabin).name : '', 'выберите в форме')}
+      ${line('Даты', b.inDate ? fd(b.inDate) + (b.outDate ? ' – ' + fd(b.outDate) + ', ' + n + ' ' + nightsWord(n) : '') : '', 'не распознаны')}
+      ${b.phone ? line('Телефон', b.phone) : ''}
+      ${b.adults != null || b.kids ? line('Гости', (b.adults ?? 0) + ' взр.' + (b.kids ? ' + ' + b.kids + ' реб.' : '')) : ''}
+      ${b.total ? line('Итого', money(b.total)) : b.perNight ? line('За ночь', money(b.perNight)) : ''}
+      ${b.prepay || b.prepayFull ? line('Предоплата', b.prepayFull ? 'вся сумма' : money(b.prepay) + ', ' + b.prepayMethod) : ''}
+      ${b.note ? line('Заметка', b.note) : ''}
+      <div class="grid2"><button class="btn small" style="width:100%" data-act="qbooking">Проверить и сохранить</button><button class="btn ghost small" style="width:100%" data-act="qtask">Это дело</button></div></div>`;
+  } else {
+    const x = r.task;
+    box.innerHTML = `<div class="qres"><div class="t">Новое дело</div>
+      <div style="font-size:15px">${esc(x.text)}</div>
+      <div class="kvline"><span>${esc(tcabName(x.cabin))}</span>${x.important ? '<b class="miss">важно</b>' : ''}</div>
+      <div class="grid2"><button class="btn small" style="width:100%" data-act="qtask">Добавить дело</button><button class="btn ghost small" style="width:100%" data-act="qbooking">Это бронь</button></div></div>`;
+  }
+}
+function doParse() {
+  const txt = val('qi').trim(); ui.qtext = txt;
+  if (!txt) { toast('Скажите или напишите что-нибудь'); return; }
+  ui.parsed = parseText(txt, today(), cfg.cabins);
+  if (!ui.parsed.kind) toast('Не получилось разобрать');
+  renderQuick();
+}
+let rec = null;
+function startMic() {
+  if (rec) { try { rec.stop(); } catch (e) {} return; }
+  const ta = document.getElementById('qi'), btn = document.getElementById('micbtn');
+  const base = ta.value.trim() ? ta.value.trim() + ' ' : '';
+  try {
+    rec = new SR(); rec.lang = 'ru-RU'; rec.interimResults = true; rec.continuous = false;
+    rec.onresult = e => { let s = ''; for (let i = 0; i < e.results.length; i++) s += e.results[i][0].transcript; ta.value = base + s; ui.qtext = ta.value; };
+    rec.onerror = () => toast('Микрофон недоступен — продиктуйте через клавиатуру');
+    rec.onend = () => { rec = null; if (btn) btn.classList.remove('rec'); if (ta.value.trim()) doParse(); };
+    btn.classList.add('rec');
+    rec.start();
+  } catch (e) { rec = null; if (btn) btn.classList.remove('rec'); toast('Микрофон недоступен — продиктуйте через клавиатуру'); }
+}
+/* ===== Разбор фразы: бронь или дело ===== */
+function parseText(raw, t, cabins) {
+  cabins = cabins || [];
+  const src = String(raw || '').replace(/ё/g, 'е').replace(/Ё/g, 'Е').replace(/\s+/g, ' ').trim();
+  const P2 = n => String(n).padStart(2, '0');
+  const iso = d => d.getFullYear() + '-' + P2(d.getMonth() + 1) + '-' + P2(d.getDate());
+  const tp = t.split('-').map(Number), ty = tp[0], tm = tp[1] - 1, td = tp[2];
+  const T0 = new Date(ty, tm, td);
+  const plus = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const UNITS = { один: 1, одна: 1, одну: 1, одного: 1, одной: 1, два: 2, две: 2, двух: 2, двое: 2, три: 3, трех: 3, трое: 3, четыре: 4, четырех: 4, четверо: 4, пять: 5, пяти: 5, пятеро: 5, шесть: 6, шести: 6, семь: 7, семи: 7, восемь: 8, восьми: 8, девять: 9, девяти: 9, десять: 10, десяти: 10 };
+  const ORD = [[/^перв(ый|ая|ое|ого|ом|ому|ую|ой)$/, 1], [/^втор(ой|ая|ое|ого|ом|ому|ую)$/, 2], [/^трет(ий|ья|ье|ьего|ьем|ьему|ью|ьей)$/, 3], [/^четверт(ый|ая|ое|ого|ом|ому|ую|ой)$/, 4], [/^пят(ый|ая|ое|ого|ом|ому|ую|ой)$/, 5], [/^шест(ой|ая|ое|ого|ом|ому|ую)$/, 6], [/^седьм(ой|ая|ое|ого|ом|ому|ую)$/, 7], [/^восьм(ой|ая|ое|ого|ом|ому|ую)$/, 8], [/^девят(ый|ая|ое|ого|ом|ому|ую|ой)$/, 9], [/^десят(ый|ая|ое|ого|ом|ому|ую|ой)$/, 10], [/^одиннадцат/, 11], [/^двенадцат/, 12], [/^тринадцат/, 13], [/^четырнадцат/, 14], [/^пятнадцат/, 15], [/^шестнадцат/, 16], [/^семнадцат/, 17], [/^восемнадцат/, 18], [/^девятнадцат/, 19], [/^двадцат/, 20], [/^тридцат/, 30]];
+  const wn = w => { if (UNITS[w] != null) return UNITS[w]; const o = ORD.find(x => x[0].test(w)); return o ? o[1] : null; };
+  const toks = src.toLowerCase().replace(/[,;!?«»"()]/g, ' ').replace(/\s+/g, ' ').trim().split(' ');
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const w = toks[i].replace(/\.$/, '');
+    let n = wn(w);
+    if (n == null) { out.push(toks[i]); continue; }
+    if ((n === 20 || n === 30) && i + 1 < toks.length) { const u = wn(toks[i + 1].replace(/\.$/, '')); if (u && u < 10) { n += u; i++; } }
+    out.push(String(n));
+  }
+  const s = ' ' + out.join(' ') + ' ';
+
+  /* --- даты --- */
+  const MONS = ['январ', 'феврал', 'март', 'апрел', 'ма', 'июн', 'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'];
+  const M = '(январ[а-я]*|феврал[а-я]*|март[а-я]*|апрел[а-я]*|ма[йя]|июн[а-я]*|июл[а-я]*|август[а-я]*|сентябр[а-я]*|октябр[а-я]*|ноябр[а-я]*|декабр[а-я]*)';
+  const mi = w => { if (!w) return null; if (/^ма[йя]/.test(w)) return 4; const i = MONS.findIndex(p => p !== 'ма' && w.indexOf(p) === 0); return i < 0 ? null : i; };
+  const mn = x => (x && +x >= 1 && +x <= 12) ? +x - 1 : null;
+  const DT = '(\\d{1,2})(?:[./](\\d{1,2}))?(?:-?(?:го|е|ое))?(?:\\s+числа)?(?:\\s+' + M + ')?';
+  let d1 = null, m1 = null, d2 = null, m2 = null, r, inD = null, outD = null;
+  if ((r = s.match(new RegExp('\\s(?:(?:с|со)\\s+)?' + DT + '\\s+(?:по|до)\\s+' + DT + '[\\s.]')))) {
+    d1 = +r[1]; m1 = mn(r[2]) ?? mi(r[3]); d2 = +r[4]; m2 = mn(r[5]) ?? mi(r[6]);
+  } else if ((r = s.match(new RegExp('\\s(\\d{1,2})\\s*[-–]\\s*(\\d{1,2})\\s+' + M)))) {
+    d1 = +r[1]; d2 = +r[2]; m2 = mi(r[3]);
+  }
+  const startOf = (d, m) => {
+    if (m == null) { m = tm; if (d < td) m++; }
+    let x = new Date(ty, m, d);
+    if (x < plus(T0, -7)) x = new Date(ty + 1, m, d);
+    return x;
+  };
+  if (d1 && d2) {
+    const st = startOf(d1, m1 ?? m2);
+    const em = m2 ?? st.getMonth();
+    let en = new Date(st.getFullYear(), em, d2);
+    if (en <= st) en = m2 == null ? new Date(st.getFullYear(), st.getMonth() + 1, d2) : new Date(st.getFullYear() + 1, em, d2);
+    inD = st; outD = en;
+  } else {
+    if (/\sпослезавтра\s/.test(s)) inD = plus(T0, 2);
+    else if (/\sзавтра\s/.test(s)) inD = plus(T0, 1);
+    else if (/\sсегодня\s/.test(s)) inD = T0;
+    else if ((r = s.match(new RegExp('\\s(\\d{1,2})(?:-?(?:го|е|ое))?\\s+' + M)))) inD = startOf(+r[1], mi(r[2]));
+    else if ((r = s.match(/\s(\d{1,2})[./](\d{1,2})(?:[./]\d{2,4})?[\s.]/)) && mn(r[2]) != null) inD = startOf(+r[1], mn(r[2]));
+    else if ((r = s.match(/\s(?:с|со)\s+(\d{1,2})(?:-?(?:го|е|ое))?(?:\s+числа)?\s/))) inD = startOf(+r[1], null);
+    if (inD) {
+      let n = null;
+      if ((r = s.match(/\sна\s+(\d{1,2})\s*(?:ноч|сут|дн|ден)/)) || (r = s.match(/\s(\d{1,2})\s+(?:ноч|сут)/))) n = +r[1];
+      else if (/\sна\s+неделю/.test(s)) n = 7;
+      else if (/\sна\s+(?:ночь|сутки)/.test(s)) n = 1;
+      else if (/\sна\s+выходные/.test(s)) n = 2;
+      if (n) outD = plus(inD, n);
+      else if ((r = s.match(new RegExp('\\s(?:по|до)\\s+(\\d{1,2})(?:-?(?:го|е|ое))?(?:\\s+числа)?(?:\\s+' + M + ')?[\\s.]')))) {
+        const em = mi(r[2]) ?? inD.getMonth();
+        let en = new Date(inD.getFullYear(), em, +r[1]);
+        if (en <= inD) en = new Date(inD.getFullYear(), em + 1, +r[1]);
+        outD = en;
+      }
+    }
+  }
+
+  /* --- домик --- */
+  let cabin = null;
+  cabins.forEach(c => { const nm = String(c.name || '').toLowerCase().replace(/ё/g, 'е').trim(); if (nm.length > 2 && !/^домик\s*\d+$/.test(nm) && s.indexOf(' ' + nm) >= 0) cabin = c.id; });
+  if (cabin == null) {
+    const cands = []; let m;
+    const re1 = /\s(\d{1,2})(?:-?(?:й|ый|ой|ий|ом|ем))?\s+(?:домик|дом)/g; while ((m = re1.exec(s))) cands.push(+m[1]);
+    const re2 = /\s(?:домик|дом)[а-я]*\s+(?:номер\s+|№\s*)?(\d{1,2})(?!\d)/g; while ((m = re2.exec(s))) cands.push(+m[1]);
+    const ok = cands.find(n => n >= 1 && n <= cabins.length);
+    if (ok) cabin = cabins[ok - 1].id;
+  }
+
+  /* --- телефон --- */
+  let phone = '';
+  (src.match(/\+?\d[\d\s\-()]{8,17}\d/g) || []).some(p => {
+    let d = p.replace(/\D/g, '');
+    if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
+    if (d.length === 10) d = '7' + d;
+    if (d.length !== 11) return false;
+    phone = '+' + d[0] + ' ' + d.slice(1, 4) + ' ' + d.slice(4, 7) + '-' + d.slice(7, 9) + '-' + d.slice(9);
+    return true;
+  });
+
+  /* --- гости --- */
+  let adults = null, kids = null;
+  if ((r = s.match(/\s(\d{1,2})\s+взросл/))) adults = +r[1];
+  if ((r = s.match(/\s(\d{1,2})\s+(?:реб|дет|малыш)/))) kids = +r[1]; else if (/\sс\s+(?:ребенком|малышом|дочкой|сыном)/.test(s)) kids = 1;
+  if (adults == null && (r = s.match(/\s(\d{1,2})\s+(?:человек|чел|гост|персон)/))) adults = +r[1];
+  if (adults == null) { const g = { вдвоем: 2, втроем: 3, вчетвером: 4, впятером: 5, вшестером: 6 }; Object.keys(g).forEach(k => { if (s.indexOf(' ' + k) >= 0) adults = g[k]; }); }
+
+  /* --- деньги --- */
+  const AMT = '(\\d{1,3}(?:\\s\\d{3})+|\\d+)\\s*(тыс[а-я]*\\.?|к(?![а-я]))?';
+  const amt = m => m ? Math.round(+m[1].replace(/\s/g, '') * (m[2] ? 1000 : 1)) : 0;
+  const perNight = amt(s.match(new RegExp('\\s' + AMT + '\\s*(?:р[а-я]*\\.?|₽)?\\s*(?:за|в)\\s+(?:ночь|сутки)')));
+  const total = amt(s.match(new RegExp('(?:за все|итого|всего|стоимость|сумма)\\s*[:\\-]?\\s*' + AMT))) || amt(s.match(new RegExp('\\s' + AMT + '\\s*(?:р[а-я]*\\.?|₽)?\\s*(?:за все|итого|всего)')));
+  const prepay = amt(s.match(new RegExp('(?:предоплат[а-я]*|аванс[а-я]*|задат[а-я]*|внес[а-я]*|заплатил[а-я]*|оплатил[а-я]*|перевел[а-я]*|скинул[а-я]*)\\s+(?:уже\\s+)?(?:в размере\\s+)?' + AMT)));
+  const prepayFull = /оплатил[а-я]*\s+(?:все|полностью)|полностью\s+оплат/.test(s);
+  const prepayMethod = /налич/.test(s) ? 'наличные' : /карт/.test(s) ? 'карта' : 'перевод';
+
+  /* --- время --- */
+  const findTime = str => {
+    const re = /(?:в|к|около)\s+(\d{1,2})(?:[:.](\d{2}))?\s*(час[а-я]*|ч(?=[\s.])|утра|дня|вечера)?/g; let m;
+    while ((m = re.exec(str))) {
+      if (!m[2] && !m[3]) continue;
+      let h = +m[1]; if ((m[3] === 'дня' || m[3] === 'вечера') && h < 12) h += 12;
+      if (h <= 23) return P2(h) + ':' + (m[2] || '00');
+    }
+    return '';
+  };
+  const cut = s.search(/\s(?:выезд|выезжа|уезжа|уед)/);
+  const outTime = cut >= 0 ? findTime(s.slice(cut)) : '';
+  const inTime = findTime(cut >= 0 ? s.slice(0, cut) : s);
+
+  /* --- имя --- */
+  const STOP = ['домик', 'дом', 'доме', 'завтра', 'сегодня', 'послезавтра', 'семья', 'гости', 'гость', 'человек', 'с', 'со', 'по', 'в', 'во', 'на', 'до', 'и', 'к', 'нам', 'они', 'он', 'она', 'еще', 'уже', 'тоже', 'будет', 'будут', 'наверное', 'бронь', 'числа', 'взрослых', 'двое', 'трое', 'надо', 'нужно', 'дело', 'заезд', 'выезд', 'потом', 'вечером', 'утром', 'днем', 'ночью', 'там', 'тут', 'у', 'за', 'от', 'авито', 'суточно', 'домика', 'домики'];
+  const okWord = w => { const l = w.toLowerCase(); return STOP.indexOf(l) < 0 && mi(l) == null && !/\d/.test(l) && l.length > 1; };
+  const clean = x => x ? x.split(' ').filter(okWord).slice(0, 2).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ') : '';
+  const srcL = src ? src[0].toLowerCase() + src.slice(1) : '';
+  const V = '(?:заезд|заезжа|заед|приезжа|приед|въезжа|въед|засел|бронир|забронир)';
+  let name = '';
+  const tries = [
+    () => (srcL.match(new RegExp(V + '[а-я]*\\s+(?:к нам\\s+|семья\\s+|гост[а-я]*\\s+)?([А-Я][а-я]+(?:\\s+[А-Я][а-я]+)?)')) || [])[1],
+    () => (src.match(new RegExp('(?:^|[\\s.])([А-Я][а-я]+(?:\\s+[А-Я][а-я]+)?)\\s+(?:' + V.slice(3, -1) + '|будет|будут|хочет)')) || [])[1],
+    () => (srcL.match(/(?:на имя|для|клиент[а-я]*|гост[ья]|гостя)\s+([А-Я][а-я]+(?:\s+[А-Я][а-я]+)?)/) || [])[1],
+    () => (s.match(new RegExp(V + '[а-я]*\\s+([а-я]{3,}(?:\\s+[а-я]{3,})?)')) || [])[1],
+    () => { const m = src.match(/(?:^|\s)[А-Я][а-я]+(?:\s+[А-Я][а-я]+)?/g) || []; return m.map(x => clean(x.trim())).find(Boolean); }
+  ];
+  for (const f of tries) { name = clean(f()); if (name) break; }
+
+  /* --- откуда, заметка --- */
+  const source = /авито/.test(s) ? 'Авито' : /суточно/.test(s) ? 'Суточно' : /знаком|друз/.test(s) ? 'Знакомые' : /повторн|снова|опять|в прошлый раз/.test(s) ? 'Повторно' : /инст|вк\s|вконтакт|телеграм|соцсет/.test(s) ? 'Соцсети' : '';
+  let note = '';
+  if ((r = src.match(/(заметка|примечание|пожелани[а-я]*|просил[аи]?|просят|хотят)\s*[:\-–]?\s*(.+)$/i))) note = /^(заметка|примечание)/i.test(r[1]) ? r[2] : r[0];
+  if (note) note = note[0].toUpperCase() + note.slice(1);
+
+  /* --- дело --- */
+  const low = s.trim();
+  const isTask = /^(?:дело|задача|задание|надо|нужно|не забыть|напомни[а-я]*|важно|срочно|купить|починить|поменять|заменить|убрать|помыть|почистить|вызвать|проверить|отремонтировать|покрасить|заказать|привезти|отвезти|позвонить|вымыть|постирать|разобраться|прибрать|скосить|подкачать|докупить|отнести|забрать|сделать|повесить|прикрутить)/.test(low);
+  const bookingWords = /заезж|заед|приезж|приед|въезж|въед|засел|бронь|бронир|гост|ноч|сутк/.test(s);
+  let taskText = src.replace(/^(?:дело|задача|задание|не забыть|напомни(?:ть)?(?:\s+мне)?)\s*[:\-–,]?\s*/i, '').trim();
+  if (taskText) taskText = taskText[0].toUpperCase() + taskText.slice(1);
+  const important = /(?:^|\s)(?:важно|срочно)/.test(s);
+
+  const kind = (isTask && !bookingWords) ? 'task' : inD ? 'booking' : (isTask || src.length > 3) ? 'task' : null;
+  return {
+    kind,
+    booking: { name, phone, cabin, inDate: inD ? iso(inD) : '', outDate: outD ? iso(outD) : '', inTime, outTime, adults, kids, perNight, total, prepay, prepayFull, prepayMethod, source, note },
+    task: { text: taskText, cabin: cabin == null ? 0 : cabin, important }
+  };
 }
 
 function vToday() {
@@ -281,6 +559,16 @@ function vToday() {
     <div><div class="sub">${WDF[d.getDay()]}, ${d.getDate()} ${MONG[d.getMonth()]}</div><h1>Мои домики</h1></div>
     <button class="iconbtn" data-act="settings" aria-label="Настройки">${ICON.gear}</button>
   </div>
+  <div class="card quick">
+    <label class="t" for="qi">Скажите или напишите</label>
+    <div class="qline">
+      <textarea id="qi" rows="1" placeholder="С 5 по 16 ноября заезжает Александр в 3 домик">${esc(ui.qtext)}</textarea>
+      ${SR ? `<button class="iconbtn" id="micbtn" data-act="mic" aria-label="Сказать голосом">${ICON.mic}</button>` : ''}
+      <button class="iconbtn" data-act="parse" aria-label="Разобрать">${ICON.right}</button>
+    </div>
+    <div class="hint">${SR ? 'Нажмите на микрофон и говорите.' : 'Нажмите на микрофон на клавиатуре телефона и продиктуйте.'} Бронь: «с 5 по 16 ноября заезжает Александр в третий домик, предоплата 5 тысяч». Дело: «починить кран в третьем доме».</div>
+    <div id="qres"></div>
+  </div>
   <div class="tiles">
     <div class="tile"><b>${occupied} из ${cfg.cabins.length}</b><span>занято сегодня</span></div>
     <div class="tile"><b>${ins} / ${outs}</b><span>заезды / выезды</span></div>
@@ -295,11 +583,15 @@ function vToday() {
     ${cfg.cabins.map((c, i) => { const st = cabinStatus(c, t); return `
       <button class="row" data-act="${st.b ? 'card' : 'new'}" data-id="${st.b ? st.b.id : ''}" data-cabin="${c.id}" data-date="${t}">
         <div class="num">${i + 1}</div>
-        <div class="grow"><div class="t">${esc(c.name)}</div><div class="s">${esc(st.sub)}</div></div>
+        <div class="grow"><div class="t">${esc(c.name)}</div><div class="s">${esc(st.sub)}${openTasks(c.id).length ? ' · дел: ' + openTasks(c.id).length : ''}</div></div>
         <span class="chip ${st.cls}">${st.chip}</span>
       </button>`; }).join('')}
   </div>
   <button class="btn" data-act="new">${ICON.plus}Новая бронь</button>
+  <div class="head" style="align-items:baseline"><h2>Не забыть</h2><button class="linkbtn" data-act="tab" data-tab="tasks">Все дела</button></div>
+  <div class="list">
+    ${openTasks().slice(0, 4).map(taskRow).join('') || '<div class="empty">Дел нет. Добавьте во вкладке «Дела» или скажите выше</div>'}
+  </div>
   <h2>Ближайшие заезды</h2>
   <div class="list">
     ${upcoming.length ? upcoming.map(b => `
@@ -459,6 +751,7 @@ function openCard(id) {
     </div>
     ${b.note ? `<div class="note">${esc(b.note)}</div>` : ''}
   </div>
+  ${openTasks(b.cabin).length && b.outDate >= t ? `<div class="card" style="gap:8px"><h2 style="margin:0">Дела по домику</h2>${openTasks(b.cabin).map(x => `<div class="s" style="white-space:normal">• ${esc(x.text)}${x.important ? ' <b style="color:#852A20">важно</b>' : ''}</div>`).join('')}</div>` : ''}
   <div class="card">
     <div class="head" style="align-items:baseline"><h2 style="margin:0">Оплата</h2><span class="s">${b.perNight ? n + ' ' + nightsWord(n) + ' × ' + money(b.perNight) : ''}</span></div>
     <div class="progress"><div style="width:${pct}%"></div></div>
@@ -493,11 +786,14 @@ function openCard(id) {
 let form = null;
 function openForm(b, pre) {
   const isNew = !b;
-  const inD = b ? b.inDate : (pre && pre.date) || today();
-  const cab = b ? b.cabin : (pre && +pre.cabin) || cfg.cabins[0].id;
-  const pn = b ? (b.perNight || '') : (+cabin(cab).price || '');
-  b = b || { id: uid(), cabin: cab, name: '', phone: '', inDate: inD, inTime: '14:00', outDate: addDays(inD, 1), outTime: '12:00', adults: 2, kids: 0, perNight: pn, total: pn || '', source: '', note: '', payments: [] };
-  form = { b, isNew, cabin: b.cabin, source: b.source, totalTouched: !isNew && b.perNight && +b.total !== b.perNight * diff(b.inDate, b.outDate) };
+  const dr = (pre && pre.draft) || null;
+  const inD = b ? b.inDate : (dr && dr.inDate) || (pre && pre.date) || today();
+  const cab = b ? b.cabin : (dr && dr.cabin) || (pre && +pre.cabin) || cfg.cabins[0].id;
+  const pn = b ? (b.perNight || '') : ((dr && dr.perNight) || +cabin(cab).price || '');
+  const outD = (dr && dr.outDate && dr.outDate > inD) ? dr.outDate : addDays(inD, 1);
+  b = b || { id: uid(), cabin: cab, name: (dr && dr.name) || '', phone: (dr && dr.phone) || '', inDate: inD, inTime: (dr && dr.inTime) || '14:00', outDate: outD, outTime: (dr && dr.outTime) || '12:00',
+    adults: dr && dr.adults != null ? dr.adults : 2, kids: (dr && dr.kids) || 0, perNight: pn, total: (dr && dr.total) || (pn ? pn * diff(inD, outD) : ''), source: (dr && dr.source) || '', note: (dr && dr.note) || '', payments: [] };
+  form = { b, isNew, cabin: b.cabin, source: b.source, totalTouched: (!isNew && b.perNight && +b.total !== b.perNight * diff(b.inDate, b.outDate)) || !!(dr && dr.total) };
   const sources = ['Авито', 'Суточно', 'Знакомые', 'Повторно', 'Соцсети', 'Другое'];
   openSheet(`
   <div class="shead"><h1 style="font-size:24px">${isNew ? 'Новая бронь' : 'Изменить бронь'}</h1></div>
@@ -524,6 +820,11 @@ function openForm(b, pre) {
   <button class="btn" data-act="saveform">${isNew ? 'Сохранить бронь' : 'Сохранить изменения'}</button>
   <button class="btn ghost" data-act="close">Отмена</button>`);
   recalc();
+  if (dr && isNew) {
+    const preAmt = dr.prepayFull ? (+val('f_total') || 0) : (+dr.prepay || 0);
+    if (preAmt) document.getElementById('f_pre').value = preAmt;
+    if (dr.prepayMethod) document.querySelectorAll('#f_pmethod button').forEach(x => x.classList.toggle('on', x.dataset.v === dr.prepayMethod));
+  }
 }
 const val = id => (document.getElementById(id) || {}).value || '';
 function recalc() {
@@ -589,6 +890,26 @@ function readSettings() {
 
 /* ===== Events ===== */
 const ACT = {
+  parse: () => doParse(),
+  mic: () => startMic(),
+  qbooking: () => { const r = ui.parsed; ui.parsed = null; ui.qtext = ''; openForm(null, { draft: r.booking }); },
+  qtask: async () => {
+    const r = ui.parsed, x = r.task;
+    await saveTask({ id: uid(), text: x.text || ui.qtext, cabin: +x.cabin || 0, important: !!x.important, done: false, created: today() });
+    ui.parsed = null; ui.qtext = ''; haptic(); toast('Дело добавлено'); render(true);
+  },
+  addtask: async () => {
+    const text = val('t_text').trim();
+    if (!text) { toast('Напишите, что нужно сделать'); haptic('error'); return; }
+    const cab = +((document.querySelector('#t_cabin .on') || {}).dataset || {}).v || 0;
+    await saveTask({ id: uid(), text: text[0].toUpperCase() + text.slice(1), cabin: cab, important: document.getElementById('t_imp').classList.contains('on'), done: false, created: today() });
+    haptic(); toast('Дело добавлено'); render(true);
+  },
+  toggleimp: (d, el) => el.classList.toggle('on'),
+  toggletask: async d => { const x = tasks.find(t => t.id === d.id); if (!x) return; const n = { ...x, done: !x.done, doneDate: !x.done ? today() : '' }; await saveTask(n); haptic(); render(true); },
+  deltask: async d => { if (await confirmBox('Удалить это дело?')) { await removeTask(d.id); render(true); } },
+  tfilter: d => { ui.tf = d.v; render(true); },
+  showdone: () => { ui.showDone = !ui.showDone; render(true); },
   tab: d => { ui.tab = d.tab; if (!document.getElementById('sheet').hidden) closeSheet(); else render(); },
   close: () => closeSheet(),
   settings: () => openSettings(),
@@ -635,6 +956,7 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'q') { ui.q = e.target.value; renderGuestList(); }
+  if (e.target.id === 'qi') ui.qtext = e.target.value;
   if (['f_in', 'f_out', 'f_pn'].includes(e.target.id)) {
     if (e.target.id === 'f_in' && val('f_out') <= val('f_in')) document.getElementById('f_out').value = addDays(val('f_in'), 1);
     recalc();
@@ -642,7 +964,15 @@ document.addEventListener('input', e => {
   if (e.target.id === 'f_total') form.totalTouched = true;
 });
 
-load().then(() => { render(); if (OPEN_B && bookings.some(b => b.id === OPEN_B)) openCard(OPEN_B); });
+document.addEventListener('keydown', e => { if (e.target.id === 'qi' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doParse(); } });
+
+const START_TAB = QS.get('tab'), NB = QS.get('nb');
+if (['today', 'cal', 'tasks', 'guests', 'money'].includes(START_TAB)) ui.tab = START_TAB;
+load().then(() => {
+  render();
+  if (OPEN_B && bookings.some(b => b.id === OPEN_B)) openCard(OPEN_B);
+  else if (NB) { try { openForm(null, { draft: JSON.parse(NB) }); } catch (e) {} }
+});
 </script>
 </body>
 </html>
