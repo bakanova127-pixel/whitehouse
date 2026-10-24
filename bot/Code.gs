@@ -27,7 +27,7 @@ const P = PropertiesService.getScriptProperties();
 const HEAD = ['id', 'Домик', 'Гость', 'Телефон', 'Заезд', 'Время заезда', 'Выезд', 'Время выезда',
   'Взрослых', 'Детей', 'Цена за ночь', 'Итого', 'Оплачено', 'Долг', 'Откуда', 'Заметка', 'Создано', 'data'];
 const HEAD_T = ['id', 'Домик', 'Дело', 'Важно', 'Сделано', 'Создано', 'data'];
-const BTN = { today: '🏡 Сегодня', week: '📅 Заезды на неделю', debts: '💰 Кто должен', tasks: '🛠 Дела' };
+const BTN = { today: '🏡 Сегодня', week: '📅 Заезды на неделю', debts: '💰 Кто должен', tasks: '🛠 Дела', report: '📊 Отчёт за месяц', export: '📁 Выгрузка' };
 const MONG = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
@@ -196,8 +196,8 @@ function handleUpdate(u) {
   if (cmd === '/users') {
     return send(id, '👥 Доступ к боту:\n' + owners.map((x, i) => '• <code>' + x + '</code>' + (i === 0 ? ' — владелец' : '') + (x === id ? ' (вы)' : '')).join('\n') + (owners.length > 1 ? '\n\nУбрать: <code>/remove ID</code>' : ''));
   }
-  if (cmd === '/report') { const a = text.split(/\s+/)[1] || '', ym = /^\d{4}-\d{2}$/.test(a) ? a : todayStr().slice(0, 7); return send(id, monthReportText(ym, getCfg(), allBookings(), allItems('expenses')), openKb('&tab=money')); }
-  if (cmd === '/export') return send(id, '📊 Все брони и дела — в Google-таблице:\n' + sheet().getParent().getUrl());
+  if (cmd === '/report' || text === BTN.report) { const a = text.split(/\s+/)[1] || '', ym = /^\d{4}-\d{2}$/.test(a) ? a : todayStr().slice(0, 7); return send(id, monthReportText(ym, getCfg(), allBookings(), allItems('expenses')), openKb('&tab=money')); }
+  if (cmd === '/export' || text === BTN.export) return send(id, '📊 Все брони и дела — в Google-таблице:\n' + sheet().getParent().getUrl());
   if (cmd === '/start') {
     send(id, '👋 Привет' + (msg.from.first_name ? ', ' + esc(msg.from.first_name) : '') + '!\n\n' +
       'Здесь всё про домики: брони, гости, оплаты и дела.\n' +
@@ -251,7 +251,7 @@ function handleFreeText(id, text) {
 }
 
 function mainKb() {
-  return { keyboard: [[{ text: BTN.today }, { text: BTN.week }], [{ text: BTN.debts }, { text: BTN.tasks }]], resize_keyboard: true, is_persistent: true };
+  return { keyboard: [[{ text: BTN.today }, { text: BTN.week }], [{ text: BTN.debts }, { text: BTN.tasks }], [{ text: BTN.report }, { text: BTN.export }]], resize_keyboard: true, is_persistent: true };
 }
 
 function tasksText() {

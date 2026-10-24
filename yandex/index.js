@@ -26,7 +26,7 @@ const TG_BASE = (process.env.TG_API || 'https://api.telegram.org').replace(/\/+$
 const TG = TG_BASE + '/bot' + TOKEN + '/';
 const SECRET = crypto.createHash('sha256').update('wh:' + TOKEN).digest('hex').slice(0, 48);
 const CRON_KEY = crypto.createHash('sha256').update('cron:' + TOKEN).digest('hex').slice(0, 32);
-const BTN = { today: '🏡 Сегодня', week: '📅 Заезды на неделю', debts: '💰 Кто должен', tasks: '🛠 Дела' };
+const BTN = { today: '🏡 Сегодня', week: '📅 Заезды на неделю', debts: '💰 Кто должен', tasks: '🛠 Дела', report: '📊 Отчёт за месяц', export: '📁 Выгрузка' };
 const MONG = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
@@ -216,8 +216,8 @@ async function handleUpdate(u) {
   if (cmd === '/week' || text === BTN.week) return send(id, weekText(d), openKb());
   if (cmd === '/debts' || text === BTN.debts) return send(id, debtsText(d), openKb());
   if (cmd === '/tasks' || text === BTN.tasks) return send(id, tasksText(d), openKb('&tab=tasks'));
-  if (cmd === '/export') return sendExport(id, d);
-  if (cmd === '/report') { const ym = (text.split(/\s+/)[1] || '').match(/^\d{4}-\d{2}$/) ? text.split(/\s+/)[1] : todayStr().slice(0, 7); return send(id, monthReportText(ym, getCfg(d), d.bookings, d.expenses), openKb('&tab=money')); }
+  if (cmd === '/export' || text === BTN.export) return sendExport(id, d);
+  if (cmd === '/report' || text === BTN.report) { const ym = (text.split(/\s+/)[1] || '').match(/^\d{4}-\d{2}$/) ? text.split(/\s+/)[1] : todayStr().slice(0, 7); return send(id, monthReportText(ym, getCfg(d), d.bookings, d.expenses), openKb('&tab=money')); }
   if (msg.voice || msg.audio) return handleVoice(id, msg.voice || msg.audio, d);
   if (text && text[0] !== '/') return handleFreeText(id, text, d);
   return send(id, 'Выберите кнопку внизу 👇', mainKb());
@@ -273,7 +273,7 @@ async function handleFreeText(id, text, d) {
 }
 
 function mainKb() {
-  return { keyboard: [[{ text: BTN.today }, { text: BTN.week }], [{ text: BTN.debts }, { text: BTN.tasks }]], resize_keyboard: true, is_persistent: true };
+  return { keyboard: [[{ text: BTN.today }, { text: BTN.week }], [{ text: BTN.debts }, { text: BTN.tasks }], [{ text: BTN.report }, { text: BTN.export }]], resize_keyboard: true, is_persistent: true };
 }
 function openKb(extra) { return { inline_keyboard: [[{ text: 'Открыть приложение', web_app: { url: appUrl(extra || '') } }]] }; }
 
