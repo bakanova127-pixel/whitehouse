@@ -99,7 +99,8 @@ function sendCheckout(chat, b, n, bs) {
   const when = n === 0 ? 'Сегодня выезд' : n === 1 ? 'Завтра выезд' : 'Через ' + n + ' дн. выезд';
   const next = (bs || allBookings()).filter(x => x.cabin == b.cabin && x.id !== b.id && x.inDate >= b.outDate).sort((a, c) => a.inDate < c.inDate ? -1 : 1)[0];
   const lines = [
-    '🚪 <b>' + when + '</b> — ' + fd(b.outDate) + (b.outTime ? ', ' + esc(b.outTime) : ''),
+    '🚪 <b>' + when + ': ' + esc(cabinName(b.cabin, cfg)) + ', ' + esc(b.name) + '</b>',
+    '🕑 ' + fd(b.outDate) + (b.outTime ? ', в ' + esc(b.outTime) : ''),
     '',
     '🏡 <b>' + esc(cabinName(b.cabin, cfg)) + '</b>',
     '👤 ' + esc(b.name),
@@ -117,7 +118,8 @@ function sendReminder(chat, b, n) {
   const when = n === 0 ? 'Сегодня заезд' : n === 1 ? 'Завтра заезд' : n === 2 ? 'Послезавтра заезд' : 'Через ' + n + ' дн. заезд';
   const nights = diff(b.inDate, b.outDate), p = paid(b), d = debt(b);
   const lines = [
-    '⏰ <b>' + when + '</b> — ' + fd(b.inDate) + (b.inTime ? ', ' + esc(b.inTime) : ''),
+    '⏰ <b>' + when + ': ' + esc(cabinName(b.cabin, cfg)) + ', ' + esc(b.name) + '</b>',
+    '🕑 ' + fd(b.inDate) + (b.inTime ? ', в ' + esc(b.inTime) : ''),
     '',
     '🏡 <b>' + esc(cabinName(b.cabin, cfg)) + '</b>',
     '👤 ' + esc(b.name),

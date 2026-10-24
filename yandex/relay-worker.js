@@ -1,7 +1,7 @@
 // Посредник для Telegram Bot API (Cloudflare Worker).
 // Пропускает только запросы к Bot API (/bot<токен>/... и /file/bot<токен>/...).
 export default {
-  // Каждое утро будит бота (Settings → Triggers → Cron: 0 7 * * *), переменная CRON_URL
+  // Будит бота по расписанию: Cron 0 7 * * * (10:00 МСК) и 0 14 * * * (17:00 МСК), переменная CRON_URL
   async scheduled(event, env, ctx) {
     if (env.CRON_URL) ctx.waitUntil(fetch(env.CRON_URL));
   },
