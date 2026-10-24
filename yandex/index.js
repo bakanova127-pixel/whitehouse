@@ -174,6 +174,18 @@ async function handleUpdate(u) {
     await send(nid, 'Вам открыли доступ к боту «Мои домики». Нажмите /start');
     return send(id, 'Доступ открыт. Этот человек тоже будет получать напоминания.');
   }
+  if (cmd === '/remove') {
+    const nid = +text.split(/\s+/)[1];
+    if (!nid) return send(id, 'Напишите так: <code>/remove 123456789</code>\nСписок всех, у кого есть доступ: /users');
+    if (nid === d.owners[0]) return send(id, 'Главного владельца бота убрать нельзя.');
+    if (d.owners.indexOf(nid) < 0) return send(id, 'У этого человека и так нет доступа.');
+    d.owners = d.owners.filter(x => x !== nid); await saveData(d);
+    await send(nid, 'Доступ к боту «Мои домики» закрыт. Спасибо, что помогли проверить 🙂');
+    return send(id, 'Готово, доступ убран. Напоминания этому человеку больше не придут.');
+  }
+  if (cmd === '/users') {
+    return send(id, '👥 Доступ к боту:\n' + d.owners.map((x, i) => '• <code>' + x + '</code>' + (i === 0 ? ' — владелец' : '') + (x === id ? ' (вы)' : '')).join('\n') + (d.owners.length > 1 ? '\n\nУбрать: <code>/remove ID</code>' : ''));
+  }
   if (cmd === '/start') {
     await send(id, '👋 Привет' + (msg.from.first_name ? ', ' + esc(msg.from.first_name) : '') + '!\n\n' +
       'Здесь всё про домики: брони, гости, оплаты и дела.\n' +
