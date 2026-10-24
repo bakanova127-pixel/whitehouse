@@ -102,6 +102,19 @@ textarea{min-height:72px;resize:vertical}
 .shead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 #toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#17231C;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;z-index:40;max-width:90vw;text-align:center}
 #toast.show{opacity:1}
+.fline{display:flex;justify-content:space-between;gap:10px;font-size:15px;padding:7px 0;border-bottom:1px solid #EEF1EE}
+.fline span{color:var(--muted)}
+.fline.strong{font-size:18px;border-bottom:0;padding-top:10px}.fline.strong span{color:var(--ink);font-weight:700}.fline.strong b{color:var(--accent)}
+.seg.mv{background:#E3E8E4;border-radius:12px;padding:3px;gap:3px;flex-wrap:nowrap}
+.seg.mv button{flex:1;border:0;background:transparent;border-radius:10px}
+.seg.mv button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.mrow{display:grid;grid-template-columns:40px minmax(0,1fr) 100px;gap:10px;align-items:center;background:none;border:0;padding:2px 0;text-align:left;cursor:pointer;font-size:14px}
+.mrow .track{height:14px;border-radius:4px;background:var(--soft);overflow:hidden;display:block}
+.mrow .track span{display:block;height:100%;background:var(--accent);border-radius:4px}
+.mrow b{text-align:right}
+.banner{border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.4}
+.banner.bad{background:#F4DEDA;color:#6E1F17}.banner.good{background:#DCEDE2;color:#14402C}
+.tiles .tile b{font-size:22px}
 /* quick input + tasks */
 .quick{gap:10px}
 .qline{display:flex;gap:8px;align-items:stretch}
@@ -151,7 +164,12 @@ const LS = 'domiki_v1';
 let cfg = { cabins: [1, 2, 3, 4].map(i => ({ id: i, name: 'Домик ' + i, price: 0 })) };
 let bookings = [];
 let tasks = [];
-let ui = { tab: 'today', calStart: null, month: null, q: '', tf: 'all', showDone: false, parsed: null, qtext: '' };
+let expenses = [];
+let gnotes = [];
+const ITEMS = { expenses: 'x_', gnotes: 'g_' };
+const itemList = kind => kind === 'expenses' ? expenses : gnotes;
+function setItems(kind, list) { if (kind === 'expenses') expenses = list; else gnotes = list; }
+let ui = { mview: 'month', fdays: 30, tab: 'today', calStart: null, month: null, q: '', tf: 'all', showDone: false, parsed: null, qtext: '' };
 
 const cs = {
   keys: () => new Promise((res, rej) => tg.CloudStorage.getKeys((e, k) => e ? rej(e) : res(k || []))),
@@ -159,9 +177,9 @@ const cs = {
   set: (k, v) => new Promise((res, rej) => tg.CloudStorage.setItem(k, v, (e, ok) => e ? rej(e) : res(ok))),
   del: k => new Promise((res, rej) => tg.CloudStorage.removeItem(k, (e, ok) => e ? rej(e) : res(ok)))
 };
-function backup() { try { localStorage.setItem(LS, JSON.stringify({ cfg, bookings, tasks })); } catch (e) {} }
+function backup() { try { localStorage.setItem(LS, JSON.stringify({ cfg, bookings, tasks, expenses, gnotes })); } catch (e) {} }
 async function load() {
-  try { const raw = JSON.parse(localStorage.getItem(LS) || 'null'); if (raw) { cfg = raw.cfg || cfg; bookings = raw.bookings || []; tasks = raw.tasks || []; } } catch (e) {}
+  try { const raw = JSON.parse(localStorage.getItem(LS) || 'null'); if (raw) { cfg = raw.cfg || cfg; bookings = raw.bookings || []; tasks = raw.tasks || []; expenses = raw.expenses || []; gnotes = raw.gnotes || []; } } catch (e) {}
   if (cloudOK) {
     try {
       const keys = await cs.keys();
@@ -171,6 +189,7 @@ async function load() {
         if (vals.cfg) cfg = JSON.parse(vals.cfg);
         bookings = keys.filter(k => k.startsWith('b_')).map(k => { try { return JSON.parse(vals[k]); } catch (e) { return null; } }).filter(Boolean);
         tasks = keys.filter(k => k.startsWith('t_')).map(k => { try { return JSON.parse(vals[k]); } catch (e) { return null; } }).filter(Boolean);
+        Object.keys(ITEMS).forEach(kind => setItems(kind, keys.filter(k => k.startsWith(ITEMS[kind])).map(k => { try { return JSON.parse(vals[k]); } catch (e) { return null; } }).filter(Boolean)));
       } else if (bookings.length) {
         await cs.set('cfg', JSON.stringify(cfg));
         for (const b of bookings) await cs.set('b_' + b.id, JSON.stringify(b));
@@ -181,9 +200,9 @@ async function load() {
     await flush();
     const r = await call({ action: 'load' });
     if (r && r.ok) {
-      const rt = r.tasks || [];
-      if (!r.bookings.length && !rt.length && (bookings.length || tasks.length)) await call({ action: 'import', cfg, bookings, tasks });
-      else { bookings = r.bookings; tasks = rt; if (r.cfg) cfg = r.cfg; else await call({ action: 'cfg', cfg }); }
+      const rt = r.tasks || [], rx = r.expenses || [], rg = r.gnotes || [];
+      if (!r.bookings.length && !rt.length && !rx.length && (bookings.length || tasks.length || expenses.length)) await call({ action: 'import', cfg, bookings, tasks, expenses, gnotes });
+      else { bookings = r.bookings; tasks = rt; expenses = rx; gnotes = rg; if (r.cfg) cfg = r.cfg; else await call({ action: 'cfg', cfg }); }
       synced = true;
     } else if (r && r.error === 'forbidden') toast('У вас нет доступа к этим данным');
     else if (r && r.error === 'auth') toast('Закройте и откройте приложение заново');
@@ -244,6 +263,18 @@ async function removeTask(id) {
   tasks = tasks.filter(t => t.id !== id); backup();
   enqueue({ action: 'deleteTask', id });
   if (cloudOK) { try { await cs.del('t_' + id); } catch (e) {} }
+}
+async function saveItem(kind, item) {
+  const list = itemList(kind), i = list.findIndex(x => x.id === item.id);
+  if (i >= 0) list[i] = item; else list.push(item);
+  backup();
+  enqueue({ action: 'saveItem', kind, item });
+  if (cloudOK) { try { await cs.set(ITEMS[kind] + item.id, JSON.stringify(item)); } catch (e) {} }
+}
+async function removeItem(kind, id) {
+  setItems(kind, itemList(kind).filter(x => x.id !== id)); backup();
+  enqueue({ action: 'deleteItem', kind, id });
+  if (cloudOK) { try { await cs.del(ITEMS[kind] + id); } catch (e) {} }
 }
 async function saveCfg() { backup(); enqueue({ action: 'cfg', cfg }); if (cloudOK) { try { await cs.set('cfg', JSON.stringify(cfg)); } catch (e) {} } }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -326,7 +357,11 @@ function vTasks() {
   const done = tasks.filter(x => x.done && match(x)).sort((a, b) => (a.doneDate || '') < (b.doneDate || '') ? 1 : -1);
   const places = [['0', 'Общее']].concat(cfg.cabins.map(c => [String(c.id), c.name]));
   const cnt = v => openTasks().filter(x => v === 'all' || String(+x.cabin || 0) === v).length;
+  const tday = today(), dirty = cfg.cabins.map(c => FIN.needsCleaning(bookings, c.id, tday)).filter(Boolean);
   return `<div><div class="sub">Что сделать по домикам</div><h1>Дела</h1></div>
+  ${dirty.length ? `<div class="card" style="gap:8px"><div class="t">Нужна уборка</div>${dirty.map(b => `
+    <div class="task" style="padding:6px 0"><div class="grow"><div class="t" style="font-size:14px">${esc(cabin(b.cabin).name)}</div><div class="s">после выезда: ${esc(b.name)}, ${fd(b.outDate)}</div></div>
+    <button class="btn small" data-act="cleanquick" data-id="${b.id}">Убрано</button></div>`).join('')}</div>` : ''}
   <div class="card" style="gap:10px">
     <label class="t" for="t_text">Новое дело</label>
     <textarea id="t_text" rows="2" placeholder="Например: починить кран, купить простыни" maxlength="200"></textarea>
@@ -546,6 +581,111 @@ function parseText(raw, t, cabins) {
   };
 }
 
+/* ===== Финансы (общий модуль для приложения и бота) ===== */
+const FIN = (() => {
+  const P2 = n => String(n).padStart(2, '0');
+  const pd = s => { const a = String(s).split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
+  const iso = d => d.toISOString().slice(0, 10);
+  const add = (s, n) => { const d = pd(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
+  const nightsBetween = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
+  const SOURCES = ['Авито', 'Суточно.ру', 'Сарафанное радио', 'Постоянный клиент', 'Соцсети', 'Другое'];
+  const OLD = { 'Суточно': 'Суточно.ру', 'Знакомые': 'Сарафанное радио', 'Повторно': 'Постоянный клиент' };
+  const normSource = s => OLD[s] || s || 'Не указано';
+  const EXP_CATS = ['Коммуналка', 'Ремонт', 'Покупки', 'Реклама', 'Связь и интернет', 'Налоги', 'Другое'];
+  const paidOf = b => (b.payments || []).reduce((s, p) => s + (+p.amount || 0), 0);
+  const cab = (cfg, id) => ((cfg && cfg.cabins) || []).find(c => c.id == id) || {};
+
+  /* «01.06-31.08, 31.12, 01.01-08.01» → [{from:'06-01', to:'08-31'}, …] */
+  function parseRanges(text) {
+    const out = [];
+    String(text || '').split(/[,;\n]+/).forEach(part => {
+      const m = part.match(/(\d{1,2})[.\/](\d{1,2})(?:\s*[-–—]\s*(\d{1,2})[.\/](\d{1,2}))?/);
+      if (!m) return;
+      const a = P2(+m[2]) + '-' + P2(+m[1]);
+      const b = m[3] ? P2(+m[4]) + '-' + P2(+m[3]) : a;
+      out.push({ from: a, to: b });
+    });
+    return out;
+  }
+  const inRanges = (md, rs) => rs.some(r => r.from <= r.to ? (md >= r.from && md <= r.to) : (md >= r.from || md <= r.to));
+
+  /* Цена одной ночи (ночь начинается в дату date) */
+  function nightPrice(cfg, cabinId, date) {
+    const c = cab(cfg, cabinId), base = +c.price || 0, md = date.slice(5);
+    const dow = pd(date).getUTCDay(), we = dow === 5 || dow === 6;
+    if (inRanges(md, parseRanges(cfg && cfg.holidays))) return +c.holiday || +c.high || (we && +c.weekend) || base;
+    if (inRanges(md, parseRanges(cfg && cfg.high))) return +c.high || (we && +c.weekend) || base;
+    return (we && +c.weekend) || base;
+  }
+  function stayPrice(cfg, cabinId, inD, outD) {
+    const list = [];
+    for (let d = inD; d < outD && list.length < 400; d = add(d, 1)) list.push({ date: d, price: nightPrice(cfg, cabinId, d) });
+    return { total: list.reduce((s, x) => s + x.price, 0), nights: list };
+  }
+  function commissionFor(cfg, source, total) {
+    const p = ((cfg && cfg.platforms) || {})[normSource(source)] || {};
+    return Math.round((+total || 0) * (+p.pct || 0) / 100 + (+p.fixed || 0));
+  }
+  const has = v => v !== undefined && v !== null && v !== '';
+  function fin(b, cfg) {
+    const kept = b.deposit && b.deposit.status === 'kept' ? (+b.deposit.kept || 0) : 0;
+    const revenue = (+b.total || 0) + kept;
+    const clean = has(b.cleanCost) ? +b.cleanCost : (+cab(cfg, b.cabin).cleaning || 0);
+    const commission = has(b.commission) ? +b.commission : commissionFor(cfg, b.source, +b.total || 0);
+    const p = paidOf(b);
+    return { revenue, kept, clean, commission, net: revenue - clean - commission, paid: p, debt: Math.max(0, (+b.total || 0) - p), nights: nightsBetween(b.inDate, b.outDate) };
+  }
+  function monthRange(ym) {
+    const a = ym.split('-').map(Number), last = new Date(Date.UTC(a[0], a[1], 0)).getUTCDate();
+    return [ym + '-01', ym + '-' + P2(last)];
+  }
+  /* Отчёт за период: брони засчитываются по дате выезда, загрузка — по ночам внутри периода */
+  function report(cfg, bookings, expenses, from, to) {
+    const end = add(to, 1), days = nightsBetween(from, end);
+    const blank = () => ({ revenue: 0, clean: 0, commission: 0, expenses: 0, net: 0, nights: 0, count: 0, kept: 0 });
+    const tot = blank(), sources = {}, cats = {};
+    const cabins = ((cfg && cfg.cabins) || []).map(c => Object.assign(blank(), { id: c.id, name: c.name, occNights: 0 }));
+    const bs = (bookings || []).filter(b => b.outDate >= from && b.outDate <= to);
+    bs.forEach(b => {
+      const f = fin(b, cfg), c = cabins.find(x => x.id == b.cabin);
+      [tot, c].forEach(o => { if (!o) return; o.revenue += f.revenue; o.clean += f.clean; o.commission += f.commission; o.nights += f.nights; o.count++; o.kept += f.kept; });
+      const s = normSource(b.source), so = sources[s] || (sources[s] = { name: s, count: 0, revenue: 0, commission: 0, net: 0 });
+      so.count++; so.revenue += f.revenue; so.commission += f.commission; so.net += f.revenue - f.commission - f.clean;
+    });
+    (bookings || []).forEach(b => {
+      const c = cabins.find(x => x.id == b.cabin); if (!c) return;
+      const a = b.inDate > from ? b.inDate : from, z = b.outDate < end ? b.outDate : end;
+      c.occNights += Math.max(0, nightsBetween(a, z));
+    });
+    (expenses || []).filter(e => e.date >= from && e.date <= to).forEach(e => {
+      const v = +e.amount || 0; tot.expenses += v;
+      cats[e.category || 'Другое'] = (cats[e.category || 'Другое'] || 0) + v;
+      const c = cabins.find(x => x.id == e.cabin); if (c) c.expenses += v;
+    });
+    cabins.forEach(c => { c.net = c.revenue - c.clean - c.commission - c.expenses; c.occ = days ? Math.min(1, c.occNights / days) : 0; c.adr = c.nights ? c.revenue / c.nights : 0; });
+    tot.net = tot.revenue - tot.clean - tot.commission - tot.expenses;
+    tot.occ = days && cabins.length ? Math.min(1, cabins.reduce((s, c) => s + c.occNights, 0) / (days * cabins.length)) : 0;
+    tot.adr = tot.nights ? tot.revenue / tot.nights : 0;
+    return { tot, cabins, sources: Object.values(sources).sort((a, b) => b.revenue - a.revenue), cats, bookings: bs, days };
+  }
+  /* Свободные окна: [{from, to}] — to = дата выезда */
+  function freeWindows(bookings, cabinId, from, days) {
+    const end = add(from, days), busy = (bookings || []).filter(b => b.cabin == cabinId && b.outDate > from && b.inDate < end).sort((a, b) => a.inDate < b.inDate ? -1 : 1);
+    const out = []; let cur = from;
+    busy.forEach(b => { if (b.inDate > cur) out.push({ from: cur, to: b.inDate }); if (b.outDate > cur) cur = b.outDate; });
+    if (cur < end) out.push({ from: cur, to: end });
+    return out.filter(w => nightsBetween(w.from, w.to) >= 1);
+  }
+  /* Домик ждёт уборки: последняя выехавшая бронь не отмечена как убранная */
+  function needsCleaning(bookings, cabinId, today) {
+    const last = (bookings || []).filter(b => b.cabin == cabinId && b.outDate <= today).sort((a, b) => a.outDate < b.outDate ? 1 : -1)[0];
+    if (!last || (last.clean && last.clean.done)) return null;
+    const stay = (bookings || []).find(b => b.cabin == cabinId && b.id !== last.id && b.inDate >= last.outDate && b.inDate < today);
+    return stay ? null : last;
+  }
+  return { SOURCES, EXP_CATS, normSource, parseRanges, nightPrice, stayPrice, commissionFor, fin, monthRange, report, freeWindows, needsCleaning, add, nightsBetween };
+})();
+
 function vToday() {
   const t = today(), d = parse(t);
   const occupied = cfg.cabins.filter(c => bookings.some(b => b.cabin == c.id && b.inDate <= t && b.outDate > t)).length;
@@ -554,6 +694,7 @@ function vToday() {
   const owed = debtors.reduce((s, b) => s + debt(b), 0);
   const upcoming = bookings.filter(b => b.inDate > t).sort(byIn).slice(0, 5);
   const noPrices = cfg.cabins.every(c => !+c.price);
+  const goal = +cfg.goal || 0, mr = FIN.report(cfg, bookings, expenses, ...FIN.monthRange(t.slice(0, 7)));
   return `
   <div class="head">
     <div><div class="sub">${WDF[d.getDay()]}, ${d.getDate()} ${MONG[d.getMonth()]}</div><h1>Мои домики</h1></div>
@@ -576,15 +717,19 @@ function vToday() {
       <div><span>Ждём оплату</span><b>${money(owed)}</b></div>
       <span style="font-weight:600">${debtors.length ? debtors.length + ' ' + (debtors.length === 1 ? 'гость' : debtors.length < 5 ? 'гостя' : 'гостей') : 'всё оплачено'}</span>
     </button>
+    <button class="tile" data-act="tab" data-tab="money" style="grid-column:1/3;border:0;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px">
+      <span>Чистыми за ${MONN[d.getMonth()].toLowerCase()}${goal ? ' · цель ' + money(goal) : ''}</span><b>${money(mr.tot.net)}</b>
+      ${goal ? `<span class="progress" style="display:block;height:8px"><span style="display:block;height:100%;background:var(--accent);width:${Math.min(100, mr.tot.revenue / goal * 100)}%"></span></span>` : ''}
+    </button>
   </div>
   ${noPrices ? '<button class="row" data-act="settings"><div class="grow"><div class="t">Укажите цены за ночь</div><div class="s">Тогда сумма брони будет считаться сама</div></div><span class="chip c-in">Настроить</span></button>' : ''}
   <h2>Домики сегодня</h2>
   <div class="list">
-    ${cfg.cabins.map((c, i) => { const st = cabinStatus(c, t); return `
-      <button class="row" data-act="${st.b ? 'card' : 'new'}" data-id="${st.b ? st.b.id : ''}" data-cabin="${c.id}" data-date="${t}">
+    ${cfg.cabins.map((c, i) => { const st = cabinStatus(c, t), nc = FIN.needsCleaning(bookings, c.id, t); return `
+      <button class="row" data-act="${st.b ? 'card' : nc ? 'card' : 'new'}" data-id="${st.b ? st.b.id : nc ? nc.id : ''}" data-cabin="${c.id}" data-date="${t}">
         <div class="num">${i + 1}</div>
-        <div class="grow"><div class="t">${esc(c.name)}</div><div class="s">${esc(st.sub)}${openTasks(c.id).length ? ' · дел: ' + openTasks(c.id).length : ''}</div></div>
-        <span class="chip ${st.cls}">${st.chip}</span>
+        <div class="grow"><div class="t">${esc(c.name)}</div><div class="s">${esc(st.sub)}${nc ? ' · нужна уборка' : ''}${openTasks(c.id).length ? ' · дел: ' + openTasks(c.id).length : ''}</div></div>
+        <span class="chip ${nc && st.cls !== 'c-busy' ? 'c-out' : st.cls}">${nc && st.cls !== 'c-busy' ? 'Уборка!' : st.chip}</span>
       </button>`; }).join('')}
   </div>
   <button class="btn" data-act="new">${ICON.plus}Новая бронь</button>
@@ -614,7 +759,10 @@ function vCal() {
     <button class="iconbtn" data-act="calmove" data-n="-7" aria-label="Неделя назад">${ICON.left}</button>
     <button class="iconbtn" data-act="calmove" data-n="7" aria-label="Неделя вперёд">${ICON.right}</button>
   </div>
-  ${start !== t ? '<button class="btn ghost small" data-act="caltoday" style="align-self:flex-start">К сегодняшнему дню</button>' : ''}
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    ${start !== t ? '<button class="btn ghost small" data-act="caltoday">К сегодняшнему дню</button>' : ''}
+    <button class="btn ghost small" data-act="freedates">Свободные даты — текст для объявления</button>
+  </div>
   <div class="cal">
     <div class="crow chead"><div></div>
       ${days.map(x => { const d = parse(x); return `<div class="${x === t ? 'today' : ''} ${d.getDay() % 6 === 0 ? 'we' : ''}"><div class="d">${WD[d.getDay()]}</div><div class="n">${d.getDate()}</div></div>`; }).join('')}
@@ -669,51 +817,141 @@ function renderGuestList() {
     <button class="row" data-act="guest" data-key="${esc(g.key)}">
       <div class="num">${esc(String(g.name || '?').trim()[0] || '?').toUpperCase()}</div>
       <div class="grow"><div class="t">${esc(g.name)}</div><div class="s">${esc(g.phone || 'без телефона')} · ${g.list.length} ${g.list.length === 1 ? 'визит' : g.list.length < 5 ? 'визита' : 'визитов'}</div></div>
-      <span class="chip c-free">${money(g.total)}</span>
+      ${(gnoteFor(g.key) || {}).mark === 'bad' ? '<span class="chip c-out">проблемный</span>' : (gnoteFor(g.key) || {}).mark === 'good' ? '<span class="chip c-free">отличный</span>' : `<span class="chip c-free">${money(g.total)}</span>`}
     </button>`).join('') : `<div class="empty">${bookings.length ? 'Никого не нашлось' : 'Гости появятся здесь, когда вы добавите первую бронь'}</div>`;
 }
 
-function vMoney() {
-  const m = ui.month || today().slice(0, 7);
-  const [yy, mm] = m.split('-').map(Number);
+/* ===== Деньги и отчёты ===== */
+const pctf = x => Math.round((x || 0) * 100) + '%';
+function ymShift(ym, n) { const [y, m] = ym.split('-').map(Number); const x = new Date(y, m - 1 + n, 1); return x.getFullYear() + '-' + pad(x.getMonth() + 1); }
+function fline(k, v, neg, strong) { return `<div class="fline${strong ? ' strong' : ''}"><span>${k}</span><b>${neg && v ? '− ' : ''}${money(v)}</b></div>`; }
+function mvSeg() {
+  return `<div class="seg mv" role="tablist">${[['month', 'Месяц'], ['year', 'Год']].map(([v, n]) => `<button type="button" data-act="mview" data-v="${v}" class="${(ui.mview || 'month') === v ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+}
+function summaryCard(r, title, cmp) {
+  return `<div class="card" style="gap:4px">
+    <div class="sub">${title}</div>
+    <div style="font-size:30px;font-weight:800;color:${r.tot.net < 0 ? 'var(--warn)' : 'var(--accent)'}">${money(r.tot.net)}</div>
+    <div class="hint" style="margin-bottom:6px">чистыми${cmp || ''}</div>
+    ${fline('Доход', r.tot.revenue)}
+    ${fline('Уборка', r.tot.clean, true)}
+    ${fline('Комиссии площадок', r.tot.commission, true)}
+    ${fline('Прочие расходы', r.tot.expenses, true)}
+    ${r.tot.kept ? `<div class="hint">В доходе учтено удержанное из залогов: ${money(r.tot.kept)}</div>` : ''}
+  </div>`;
+}
+function kpiTiles(r) {
+  return `<div class="tiles">
+    <div class="tile"><b>${pctf(r.tot.occ)}</b><span>загрузка домиков</span></div>
+    <div class="tile"><b>${money(r.tot.adr)}</b><span>средняя цена за ночь</span></div>
+    <div class="tile"><b>${r.tot.count}</b><span>выездов</span></div>
+    <div class="tile"><b>${r.tot.nights}</b><span>ночей продано</span></div>
+  </div>`;
+}
+function cabinsCard(r) {
+  return `<div class="list">${r.cabins.map(c => `
+    <div class="row" style="cursor:default;flex-direction:column;align-items:stretch;gap:6px">
+      <div class="head" style="align-items:baseline"><div class="t">${esc(c.name)}</div><b style="color:${c.net < 0 ? 'var(--warn)' : 'var(--accent)'}">${money(c.net)}</b></div>
+      <div class="s" style="white-space:normal">доход ${money(c.revenue)} · уборка ${money(c.clean)} · комиссии ${money(c.commission)}${c.expenses ? ' · расходы ' + money(c.expenses) : ''}</div>
+      <div class="s" style="white-space:normal">загрузка ${pctf(c.occ)} · ${c.nights} ${nightsWord(c.nights)} · в среднем ${money(c.adr)} за ночь</div>
+      <div class="progress" style="height:6px"><div style="width:${Math.round(c.occ * 100)}%"></div></div>
+    </div>`).join('')}</div>`;
+}
+function sourcesCard(r) {
+  if (!r.sources.length) return '<div class="empty">Пока нет выездов за этот период</div>';
+  const max = Math.max(1, ...r.sources.map(s => s.revenue));
+  return `<div class="card" style="gap:12px">${r.sources.map(s => `
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div class="head" style="align-items:baseline"><span class="t" style="font-size:14px">${esc(s.name)}</span><b>${money(s.revenue)}</b></div>
+      <div class="hbar" style="grid-template-columns:minmax(0,1fr)"><div class="track"><div style="width:${s.revenue / max * 100}%"></div></div></div>
+      <div class="s">${s.count} ${s.count === 1 ? 'бронь' : s.count < 5 ? 'брони' : 'броней'}${s.commission ? ' · комиссия ' + money(s.commission) : ''} · чистыми ${money(s.net)}</div>
+    </div>`).join('')}</div>`;
+}
+function vMoney() { return (ui.mview || 'month') === 'year' ? vYear() : vMonth(); }
+function vMonth() {
+  const m = ui.month || today().slice(0, 7), [yy, mm] = m.split('-').map(Number), t = today();
+  const [from, to] = FIN.monthRange(m);
+  const r = FIN.report(cfg, bookings, expenses, from, to);
+  const ly = FIN.report(cfg, bookings, expenses, ...FIN.monthRange((yy - 1) + '-' + pad(mm)));
+  const cmp = ly.tot.revenue ? ` · доход ${r.tot.revenue >= ly.tot.revenue ? '+' : '−'}${Math.abs(Math.round((r.tot.revenue / ly.tot.revenue - 1) * 100))}% к ${MONN[mm - 1].toLowerCase()} ${yy - 1}` : '';
+  const goal = +cfg.goal || 0;
+  const done = r.bookings.filter(b => b.outDate <= t).reduce((s, b) => s + FIN.fin(b, cfg).revenue, 0);
+  const expected = Math.max(0, r.tot.revenue - done);
+  const exList = expenses.filter(e => e.date >= from && e.date <= to).sort((a, b) => a.date < b.date ? 1 : -1);
+  const held = bookings.filter(b => b.deposit && +b.deposit.amount && (b.deposit.status || 'held') === 'held');
+  const debts = bookings.filter(b => debt(b) > 0).sort(byIn);
   const pays = [];
   bookings.forEach(b => (b.payments || []).forEach(p => { if ((p.date || '').startsWith(m)) pays.push({ ...p, b }); }));
-  const total = pays.reduce((s, p) => s + (+p.amount || 0), 0);
+  const got = pays.reduce((s, p) => s + (+p.amount || 0), 0);
   const methods = ['перевод', 'наличные', 'карта'].map(k => ({ k, v: pays.filter(p => p.method === k).reduce((s, p) => s + (+p.amount || 0), 0) })).filter(x => x.v > 0);
-  const colors = { 'перевод': '#1F5A41', 'наличные': '#C98A2E', 'карта': '#3E6FA8' };
-  const byCabin = cfg.cabins.map(c => ({ c, v: pays.filter(p => p.b.cabin == c.id).reduce((s, p) => s + (+p.amount || 0), 0) }));
-  const max = Math.max(1, ...byCabin.map(x => x.v));
-  const debts = bookings.filter(b => debt(b) > 0).sort(byIn);
-  const recent = pays.sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 12);
   return `
+  ${mvSeg()}
   <div class="calnav">
-    <div style="flex:1"><div class="sub">Деньги</div><h1>${MONN[mm - 1]} <span style="color:var(--muted);font-weight:600;font-size:18px">${yy}</span></h1></div>
+    <div style="flex:1"><div class="sub">Отчёт за месяц · по дате выезда</div><h1>${MONN[mm - 1]} <span style="color:var(--muted);font-weight:600;font-size:18px">${yy}</span></h1></div>
     <button class="iconbtn" data-act="monthmove" data-n="-1" aria-label="Прошлый месяц">${ICON.left}</button>
     <button class="iconbtn" data-act="monthmove" data-n="1" aria-label="Следующий месяц">${ICON.right}</button>
   </div>
-  <div class="card">
-    <div><div class="sub">Получено за месяц</div><div style="font-size:30px;font-weight:800;color:var(--accent)">${money(total)}</div></div>
-    ${total ? `<div class="split">${methods.map(x => `<div style="width:${x.v / total * 100}%;background:${colors[x.k]}"></div>`).join('')}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px">${methods.map(x => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${colors[x.k]};margin-right:6px"></i>${x.k[0].toUpperCase() + x.k.slice(1)} ${money(x.v)}</span>`).join('')}</div>` : '<div class="hint">В этом месяце оплат пока не было</div>'}
+  ${goal ? `<div class="card" style="gap:8px">
+    <div class="head" style="align-items:baseline"><span class="t">Цель на месяц</span><b>${money(goal)}</b></div>
+    <div class="progress"><div style="width:${Math.min(100, done / goal * 100)}%"></div></div>
+    <div class="s" style="white-space:normal">Заработано ${money(done)} (${pctf(done / goal)})${expected ? ' · ожидается ещё ' + money(expected) + ' по броням' : ''}${done + expected >= goal ? ' — цель будет выполнена' : ' · не хватает ' + money(goal - done - expected)}</div>
+  </div>` : `<button class="row" data-act="settings"><div class="grow"><div class="t">Поставьте цель на месяц</div><div class="s">Будет видно, сколько уже заработано и сколько осталось</div></div><span class="chip c-in">Настроить</span></button>`}
+  ${summaryCard(r, 'Итог месяца', cmp)}
+  ${kpiTiles(r)}
+  <h2>По домикам</h2>
+  ${cabinsCard(r)}
+  <h2>Откуда гости</h2>
+  ${sourcesCard(r)}
+  <div class="head" style="align-items:baseline"><h2>Расходы</h2><button class="linkbtn" data-act="newexp">+ Добавить</button></div>
+  <div class="list">${exList.length ? exList.map(e => `
+    <button class="row" data-act="editexp" data-id="${e.id}"><div class="grow"><div class="t" style="font-size:14px">${esc(e.category || 'Другое')}${e.note ? ' · ' + esc(e.note) : ''}</div><div class="s">${fd(e.date)} · ${esc(+e.cabin ? cabin(e.cabin).name : 'Общее')}</div></div><b>${money(e.amount)}</b></button>`).join('')
+    : '<div class="empty">Расходов за месяц нет. Уборка считается сама — её сюда вносить не нужно</div>'}</div>
+  ${held.length ? `<h2>Залоги на руках</h2><div class="list">${held.map(b => `
+    <button class="row" data-act="card" data-id="${b.id}"><div class="grow"><div class="t">${esc(b.name)}</div><div class="s">${esc(cabin(b.cabin).name)} · выезд ${fd(b.outDate)}</div></div><b>${money(b.deposit.amount)}</b></button>`).join('')}</div>` : ''}
+  <div class="head" style="align-items:baseline"><h2>Должны</h2><b style="color:var(--warn)">${money(debts.reduce((s, b) => s + debt(b), 0))}</b></div>
+  <div class="list">${debts.length ? debts.map(b => `
+    <button class="row" data-act="card" data-id="${b.id}"><div class="grow"><div class="t">${esc(b.name)}</div><div class="s">${esc(cabin(b.cabin).name)} · ${fd(b.inDate)} – ${fd(b.outDate)}</div></div><b>${money(debt(b))}</b></button>`).join('') : '<div class="empty">Никто ничего не должен</div>'}</div>
+  <h2>Выезды за месяц</h2>
+  <div class="list">${r.bookings.length ? r.bookings.slice().sort((a, b) => a.outDate < b.outDate ? -1 : 1).map(b => { const f = FIN.fin(b, cfg); return `
+    <button class="row" data-act="card" data-id="${b.id}"><div class="grow"><div class="t">${esc(b.name)}</div><div class="s">${esc(cabin(b.cabin).name)} · выезд ${fd(b.outDate)} · доход ${money(f.revenue)}</div></div><b style="color:var(--accent)">${money(f.net)}</b></button>`; }).join('') : '<div class="empty">В этом месяце выездов нет</div>'}</div>
+  <h2>Поступления денег за месяц</h2>
+  <div class="card" style="gap:6px">
+    <div class="head" style="align-items:baseline"><span class="s">Все оплаты, полученные в этом месяце</span><b>${money(got)}</b></div>
+    ${methods.map(x => fline(x.k[0].toUpperCase() + x.k.slice(1), x.v)).join('') || '<div class="hint">Оплат не было</div>'}
+  </div>`;
+}
+function vYear() {
+  const y = ui.year || +today().slice(0, 4);
+  const r = FIN.report(cfg, bookings, expenses, y + '-01-01', y + '-12-31');
+  const ly = FIN.report(cfg, bookings, expenses, (y - 1) + '-01-01', (y - 1) + '-12-31');
+  const months = [...Array(12)].map((_, i) => ({ i, r: FIN.report(cfg, bookings, expenses, ...FIN.monthRange(y + '-' + pad(i + 1))) }));
+  const max = Math.max(1, ...months.map(x => x.r.tot.revenue));
+  const cmp = ly.tot.revenue ? ` · доход ${r.tot.revenue >= ly.tot.revenue ? '+' : '−'}${Math.abs(Math.round((r.tot.revenue / ly.tot.revenue - 1) * 100))}% к ${y - 1} году` : '';
+  const cats = Object.entries(r.cats).sort((a, b) => b[1] - a[1]);
+  return `
+  ${mvSeg()}
+  <div class="calnav">
+    <div style="flex:1"><div class="sub">Годовой отчёт</div><h1>${y} год</h1></div>
+    <button class="iconbtn" data-act="yearmove" data-n="-1" aria-label="Прошлый год">${ICON.left}</button>
+    <button class="iconbtn" data-act="yearmove" data-n="1" aria-label="Следующий год">${ICON.right}</button>
+  </div>
+  ${summaryCard(r, 'Итог года', cmp)}
+  ${kpiTiles(r)}
+  <h2>По месяцам</h2>
+  <div class="card" style="gap:10px">${months.map(x => `
+    <button class="mrow" data-act="openmonth" data-m="${y}-${pad(x.i + 1)}" aria-label="${MONN[x.i]}: подробнее">
+      <span class="s">${MONN[x.i].slice(0, 3)}</span>
+      <span class="track"><span style="width:${x.r.tot.revenue / max * 100}%"></span></span>
+      <b>${x.r.tot.revenue ? money(x.r.tot.net) : '—'}</b>
+    </button>`).join('')}
+    <div class="hint">Полоска — доход, справа — чистыми. Нажмите на месяц, чтобы открыть подробный отчёт.</div>
   </div>
   <h2>По домикам</h2>
-  <div class="card" style="gap:10px">
-    ${byCabin.map(x => `<div class="hbar"><span class="s">${esc(x.c.name)}</span><div class="track"><div style="width:${x.v / max * 100}%"></div></div><b style="text-align:right">${money(x.v)}</b></div>`).join('')}
-  </div>
-  <div class="head" style="align-items:baseline"><h2>Должны</h2><b style="color:var(--warn)">${money(debts.reduce((s, b) => s + debt(b), 0))}</b></div>
-  <div class="list">
-    ${debts.length ? debts.map(b => `
-      <button class="row" data-act="card" data-id="${b.id}">
-        <div class="grow"><div class="t">${esc(b.name)}</div><div class="s">${esc(cabin(b.cabin).name)} · ${fd(b.inDate)} – ${fd(b.outDate)}</div></div>
-        <b>${money(debt(b))}</b>
-      </button>`).join('') : '<div class="empty">Никто ничего не должен</div>'}
-  </div>
-  <h2>Оплаты за месяц</h2>
-  <div class="card" style="padding:4px 16px">
-    ${recent.length ? recent.map(p => `
-      <div class="pay"><div class="grow"><div class="t" style="font-size:14px">${esc(p.b.name)} · ${esc(cabin(p.b.cabin).name)}</div><div class="s">${fd(p.date)} · ${esc(p.method)}</div></div>
-      <b style="color:#1A5038">+${money(p.amount)}</b></div>`).join('') : '<div class="hint" style="padding:12px 0">Пока пусто</div>'}
-  </div>`;
+  ${cabinsCard(r)}
+  <h2>Откуда гости</h2>
+  ${sourcesCard(r)}
+  <h2>Расходы по статьям</h2>
+  <div class="card" style="gap:2px">${fline('Уборка', r.tot.clean)}${fline('Комиссии площадок', r.tot.commission)}${cats.map(([k, v]) => fline(esc(k), v)).join('')}</div>`;
 }
 
 /* ===== Sheets ===== */
@@ -728,21 +966,42 @@ function openSheet(html) {
 function closeSheet() {
   document.getElementById('sheet').hidden = true; document.body.style.overflow = '';
   if (tg && ver('6.1')) tg.BackButton.hide();
-  render();
+  render(true);
 }
 if (tg && ver('6.1')) tg.BackButton.onClick(closeSheet);
 
-/* --- Booking card --- */
+/* --- Гости: отметки --- */
+const gidOf = key => 'g' + (String(key).startsWith('n:') ? 'n' + Math.abs([...key].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 7)).toString(36) : String(key).replace(/\D/g, ''));
+const gnoteFor = key => gnotes.find(x => x.key === key) || null;
+function guestInfo(name, phone, exceptId) {
+  const ph = digits(phone), nm = String(name || '').trim().toLowerCase();
+  if (!ph && nm.length < 3) return null;
+  const list = bookings.filter(b => b.id !== exceptId && ((ph && digits(b.phone) === ph) || (!ph && nm && String(b.name || '').trim().toLowerCase() === nm)));
+  const key = ph || 'n:' + nm;
+  const gn = gnoteFor(key) || (list[0] ? gnoteFor(digits(list[0].phone) || 'n:' + String(list[0].name || '').trim().toLowerCase()) : null);
+  if (!list.length && !gn) return null;
+  return { visits: list.length, mark: gn ? gn.mark : '', note: gn ? gn.note : '' };
+}
+function guestBanner(gi) {
+  if (!gi) return '';
+  if (gi.mark === 'bad') return `<div class="banner bad"><b>Внимание: проблемный гость.</b>${gi.note ? ' ' + esc(gi.note) : ''}${gi.visits ? ' Был у вас ' + gi.visits + ' раз.' : ''}</div>`;
+  if (gi.mark === 'good') return `<div class="banner good"><b>Отличный гость</b>${gi.visits ? ', был у вас ' + gi.visits + ' раз — можно предложить скидку' : ''}.${gi.note ? ' ' + esc(gi.note) : ''}</div>`;
+  return gi.visits ? `<div class="banner good">Постоянный гость: был у вас ${gi.visits} раз.${gi.note ? ' ' + esc(gi.note) : ''}</div>` : '';
+}
+
+/* --- Карточка брони --- */
 function openCard(id) {
   const b = bookings.find(x => x.id === id); if (!b) return;
-  const n = diff(b.inDate, b.outDate), p = paid(b), d = debt(b), t = today();
-  const pct = b.total > 0 ? Math.min(100, p / b.total * 100) : (p > 0 ? 100 : 0);
+  const n = diff(b.inDate, b.outDate), p = paid(b), d = debt(b), t = today(), f = FIN.fin(b, cfg);
+  const pctp = b.total > 0 ? Math.min(100, p / b.total * 100) : (p > 0 ? 100 : 0);
   const state = b.outDate < t ? ['Выехали', 'c-free'] : b.inDate <= t ? ['Живут сейчас', 'c-busy'] : ['Ждём заезда', 'c-in'];
-  const ph = digits(b.phone);
+  const ph = digits(b.phone), dep = b.deposit && +b.deposit.amount ? b.deposit : null, cl = b.clean || {};
+  const gi = guestInfo(b.name, b.phone, b.id);
   openSheet(`
   <div class="shead"><div class="sub">${esc(cabin(b.cabin).name)}</div><span class="chip ${state[1]}">${state[0]}</span></div>
+  ${gi && gi.mark === 'bad' ? guestBanner(gi) : ''}
   <div class="card">
-    <div><h1 style="font-size:24px">${esc(b.name)}</h1><div class="s" style="white-space:normal">${esc(b.phone || 'телефон не указан')}${b.source ? ' · ' + esc(b.source) : ''}</div></div>
+    <div><h1 style="font-size:24px">${esc(b.name)}</h1><div class="s" style="white-space:normal">${esc(b.phone || 'телефон не указан')}${b.source ? ' · ' + esc(FIN.normSource(b.source)) : ''}</div></div>
     <div class="grid2">
       <div class="kv"><span>Заезд</span><b>${fd(b.inDate)}${b.inTime ? ', ' + esc(b.inTime) : ''}</b></div>
       <div class="kv"><span>Выезд</span><b>${fd(b.outDate)}${b.outTime ? ', ' + esc(b.outTime) : ''}</b></div>
@@ -751,26 +1010,55 @@ function openCard(id) {
     </div>
     ${b.note ? `<div class="note">${esc(b.note)}</div>` : ''}
   </div>
+  <button class="btn ghost" data-act="tpl" data-id="${b.id}">${ICON.send}Сообщение гостю по шаблону</button>
   ${openTasks(b.cabin).length && b.outDate >= t ? `<div class="card" style="gap:8px"><h2 style="margin:0">Дела по домику</h2>${openTasks(b.cabin).map(x => `<div class="s" style="white-space:normal">• ${esc(x.text)}${x.important ? ' <b style="color:#852A20">важно</b>' : ''}</div>`).join('')}</div>` : ''}
   <div class="card">
-    <div class="head" style="align-items:baseline"><h2 style="margin:0">Оплата</h2><span class="s">${b.perNight ? n + ' ' + nightsWord(n) + ' × ' + money(b.perNight) : ''}</span></div>
-    <div class="progress"><div style="width:${pct}%"></div></div>
+    <div class="head" style="align-items:baseline"><h2 style="margin:0">Оплата</h2><span class="s">${n} ${nightsWord(n)}${n ? ' · ~' + money(b.total / n) + ' за ночь' : ''}</span></div>
+    <div class="progress"><div style="width:${pctp}%"></div></div>
     <div class="head" style="font-size:14px;align-items:baseline"><div><b>${money(p)}</b> <span class="s">из ${money(b.total)}</span></div>
       ${d > 0 ? `<b style="color:var(--warn)">осталось ${money(d)}</b>` : '<b style="color:#1A5038">оплачено</b>'}</div>
     <div>${(b.payments || []).slice().sort((x, y) => x.date < y.date ? -1 : 1).map(pm => `
       <div class="pay"><div class="grow"><div class="t" style="font-size:14px">${money(pm.amount)}</div><div class="s">${fd(pm.date)} · ${esc(pm.method)}${pm.note ? ' · ' + esc(pm.note) : ''}</div></div>
       <button class="x" data-act="delpay" data-id="${b.id}" data-pid="${pm.id}" aria-label="Удалить оплату">✕</button></div>`).join('') || '<div class="hint">Оплат пока нет</div>'}</div>
-    <div id="payform" hidden style="display:flex;flex-direction:column;gap:10px">
+    <div id="payform" style="display:none;flex-direction:column;gap:10px">
       <div class="grid2">
         <div class="field"><label for="p_amount">Сумма, ₽</label><input id="p_amount" type="number" inputmode="numeric" value="${d || ''}"></div>
         <div class="field"><label for="p_date">Дата</label><input id="p_date" type="date" value="${t}"></div>
       </div>
       <div class="seg" id="p_method">${['перевод', 'наличные', 'карта'].map((m, i) => `<button type="button" data-act="pick" class="${i === 0 ? 'on' : ''}" data-v="${m}">${m}</button>`).join('')}</div>
-      <input id="p_note" placeholder="Комментарий (необязательно)" maxlength="80">
+      <input id="p_note" placeholder="Комментарий (необязательно)" maxlength="80" aria-label="Комментарий к оплате">
       <button class="btn" data-act="savepay" data-id="${b.id}">Сохранить оплату</button>
     </div>
     <button class="btn" id="paybtn" data-act="showpay">Принять оплату</button>
   </div>
+  <div class="card" style="gap:2px">
+    <h2 style="margin:0 0 6px">Финансы брони</h2>
+    ${fline('Доход', f.revenue)}
+    ${fline('Уборка', f.clean, true)}
+    ${fline('Комиссия · ' + esc(FIN.normSource(b.source)), f.commission, true)}
+    ${fline('Чистыми', f.net, false, true)}
+    <div class="hint">В отчёт попадёт в ${['январе','феврале','марте','апреле','мае','июне','июле','августе','сентябре','октябре','ноябре','декабре'][parse(b.outDate).getMonth()]} — месяц выезда</div>
+  </div>
+  ${dep ? `<div class="card" style="gap:10px">
+    <div class="head" style="align-items:baseline"><h2 style="margin:0">Залог</h2><b>${money(dep.amount)}</b></div>
+    ${(dep.status || 'held') === 'held' ? `<div class="s">Залог у вас, его нужно вернуть или удержать при выезде</div>
+      <div id="depform" style="display:none;flex-direction:column;gap:8px">
+        <div class="field"><label for="dep_kept">Сколько удержать, ₽</label><input id="dep_kept" type="number" inputmode="numeric" value="${dep.amount}"></div>
+        <input id="dep_reason" placeholder="За что (разбили посуду, грязь…)" maxlength="80" aria-label="Причина удержания">
+        <button class="btn small" style="width:100%" data-act="depkeep" data-id="${b.id}">Сохранить удержание</button>
+      </div>
+      <div class="grid2" id="depbtns"><button class="btn small" style="width:100%" data-act="depret" data-id="${b.id}">Вернули гостю</button><button class="btn ghost small" style="width:100%" data-act="depkeepshow">Удержать</button></div>`
+    : dep.status === 'returned' ? `<div class="s">Возвращён гостю${dep.date ? ' ' + fd(dep.date) : ''}</div><button class="linkbtn" data-act="depreset" data-id="${b.id}">Отменить</button>`
+    : `<div class="s" style="white-space:normal">Удержано ${money(dep.kept)}${dep.reason ? ' — ' + esc(dep.reason) : ''}. Эта сумма учтена в доходе.</div><button class="linkbtn" data-act="depreset" data-id="${b.id}">Отменить</button>`}
+  </div>` : ''}
+  ${b.outDate <= t ? `<div class="card" style="gap:10px">
+    <div class="head" style="align-items:baseline"><h2 style="margin:0">Уборка после выезда</h2><b>${money(f.clean)}</b></div>
+    ${cl.done ? `<div class="s">Убрано ${cl.date ? fd(cl.date) : ''}${cl.by ? ' · ' + esc(cl.by) : ''}</div>`
+      : `<div class="banner bad" style="margin:0">Домик ещё не отмечен как убранный</div>
+         <input id="cl_by" placeholder="Кто убирал (необязательно)" maxlength="40" aria-label="Кто убирал">
+         <button class="btn small" style="width:100%" data-act="cleandone" data-id="${b.id}">Убрано</button>`}
+    <button class="btn ghost small" style="width:100%" data-act="cleanpaid" data-id="${b.id}">${cl.paid ? 'Уборка оплачена ✓ (нажмите, чтобы снять)' : 'Отметить: за уборку заплатили'}</button>
+  </div>` : ''}
   ${ph ? `<div class="grid2">
     <a class="btn ghost" href="tel:+${ph}">${ICON.phone}Позвонить</a>
     <button class="btn ghost" data-act="write" data-ph="${ph}">${ICON.send}Написать</button>
@@ -779,27 +1067,28 @@ function openCard(id) {
     <button class="btn ghost" data-act="edit" data-id="${b.id}">Изменить</button>
     <button class="btn danger" data-act="delbooking" data-id="${b.id}">Удалить</button>
   </div>`);
-  document.getElementById('payform').style.display = 'none';
 }
 
-/* --- Booking form --- */
+/* --- Форма брони --- */
 let form = null;
 function openForm(b, pre) {
   const isNew = !b;
   const dr = (pre && pre.draft) || null;
   const inD = b ? b.inDate : (dr && dr.inDate) || (pre && pre.date) || today();
   const cab = b ? b.cabin : (dr && dr.cabin) || (pre && +pre.cabin) || cfg.cabins[0].id;
-  const pn = b ? (b.perNight || '') : ((dr && dr.perNight) || +cabin(cab).price || '');
-  const outD = (dr && dr.outDate && dr.outDate > inD) ? dr.outDate : addDays(inD, 1);
-  b = b || { id: uid(), cabin: cab, name: (dr && dr.name) || '', phone: (dr && dr.phone) || '', inDate: inD, inTime: (dr && dr.inTime) || '14:00', outDate: outD, outTime: (dr && dr.outTime) || '12:00',
-    adults: dr && dr.adults != null ? dr.adults : 2, kids: (dr && dr.kids) || 0, perNight: pn, total: (dr && dr.total) || (pn ? pn * diff(inD, outD) : ''), source: (dr && dr.source) || '', note: (dr && dr.note) || '', payments: [] };
-  form = { b, isNew, cabin: b.cabin, source: b.source, totalTouched: (!isNew && b.perNight && +b.total !== b.perNight * diff(b.inDate, b.outDate)) || !!(dr && dr.total) };
-  const sources = ['Авито', 'Суточно', 'Знакомые', 'Повторно', 'Соцсети', 'Другое'];
+  const outD = b ? b.outDate : (dr && dr.outDate && dr.outDate > inD) ? dr.outDate : addDays(inD, 1);
+  const src = FIN.normSource(b ? b.source : (dr && dr.source) || (pre && pre.source) || '');
+  b = b || { id: uid(), cabin: cab, name: (dr && dr.name) || (pre && pre.name) || '', phone: (dr && dr.phone) || (pre && pre.phone) || '', inDate: inD, inTime: (dr && dr.inTime) || '14:00', outDate: outD, outTime: (dr && dr.outTime) || '12:00',
+    adults: dr && dr.adults != null ? dr.adults : 2, kids: (dr && dr.kids) || 0, total: (dr && dr.total) || '', source: src === 'Не указано' ? '' : src, note: (dr && dr.note) || '', payments: [] };
+  const has = v => v !== undefined && v !== null && v !== '';
+  form = { b, isNew, cabin: b.cabin, source: src === 'Не указано' ? '' : src, fixedPN: (isNew && dr && +dr.perNight) || 0,
+    totalTouched: !isNew ? (+b.total !== FIN.stayPrice(cfg, b.cabin, b.inDate, b.outDate).total) : !!(dr && dr.total), commTouched: !isNew && has(b.commission), cleanTouched: !isNew && has(b.cleanCost) };
   openSheet(`
   <div class="shead"><h1 style="font-size:24px">${isNew ? 'Новая бронь' : 'Изменить бронь'}</h1></div>
   <div class="err" id="ferr" hidden></div>
   <div class="field"><label for="f_name">Имя гостя</label><input id="f_name" value="${esc(b.name)}" placeholder="Фамилия Имя" autocomplete="off" maxlength="60"></div>
   <div class="field"><label for="f_phone">Телефон</label><input id="f_phone" type="tel" value="${esc(b.phone)}" placeholder="+7 900 000-00-00" maxlength="25"></div>
+  <div id="f_gbanner"></div>
   <div class="field"><label>Домик</label><div class="seg" id="f_cabin">${cfg.cabins.map(c => `<button type="button" data-act="fcabin" data-v="${c.id}" class="${c.id == b.cabin ? 'on' : ''}">${esc(c.name)}</button>`).join('')}</div></div>
   <div class="grid2">
     <div class="field"><label for="f_in">Заезд</label><input id="f_in" type="date" value="${b.inDate}"></div>
@@ -808,18 +1097,26 @@ function openForm(b, pre) {
     <div class="field"><label for="f_outtime">Время</label><input id="f_outtime" type="time" value="${esc(b.outTime || '')}"></div>
     <div class="field"><label for="f_ad">Взрослых</label><input id="f_ad" type="number" inputmode="numeric" min="0" value="${+b.adults || 0}"></div>
     <div class="field"><label for="f_kids">Детей</label><input id="f_kids" type="number" inputmode="numeric" min="0" value="${+b.kids || 0}"></div>
-    <div class="field"><label for="f_pn">Цена за ночь, ₽</label><input id="f_pn" type="number" inputmode="numeric" value="${b.perNight || ''}"></div>
-    <div class="field"><label for="f_total">Итого, ₽</label><input id="f_total" type="number" inputmode="numeric" value="${b.total || ''}"></div>
   </div>
-  <div class="hint" id="f_nights"></div>
-  <div class="field"><label>Откуда гость</label><div class="seg" id="f_source">${sources.map(s => `<button type="button" data-act="fsource" data-v="${s}" class="${s === b.source ? 'on' : ''}">${s}</button>`).join('')}</div></div>
+  <div class="field"><label>Откуда гость</label><div class="seg" id="f_source">${FIN.SOURCES.map(s => `<button type="button" data-act="fsource" data-v="${s}" class="${s === form.source ? 'on' : ''}">${s}</button>`).join('')}</div></div>
+  <div class="card" style="gap:10px">
+    <div class="field"><label for="f_total">Стоимость проживания, ₽</label><input id="f_total" type="number" inputmode="numeric" value="${b.total || ''}"></div>
+    <div class="hint" id="f_nights"></div>
+    <div class="grid2">
+      <div class="field"><label for="f_comm">Комиссия площадки, ₽</label><input id="f_comm" type="number" inputmode="numeric" value="${has(b.commission) ? b.commission : ''}"></div>
+      <div class="field"><label for="f_clean">Уборка, ₽</label><input id="f_clean" type="number" inputmode="numeric" value="${has(b.cleanCost) ? b.cleanCost : ''}"></div>
+      <div class="field"><label for="f_dep">Залог, ₽</label><input id="f_dep" type="number" inputmode="numeric" value="${b.deposit && +b.deposit.amount ? b.deposit.amount : ''}" placeholder="нет"></div>
+    </div>
+    <div class="hint" id="f_net"></div>
+  </div>
   <div class="field"><label for="f_note">Заметка</label><textarea id="f_note" maxlength="400" placeholder="Пожелания, машина, животные…">${esc(b.note)}</textarea></div>
   ${isNew ? `<div class="card" style="gap:10px"><div class="t">Предоплата (если уже внесли)</div>
-    <input id="f_pre" type="number" inputmode="numeric" placeholder="Сумма, ₽">
+    <input id="f_pre" type="number" inputmode="numeric" placeholder="Сумма, ₽" aria-label="Предоплата">
     <div class="seg" id="f_pmethod">${['перевод', 'наличные', 'карта'].map((m, i) => `<button type="button" data-act="pick" class="${i === 0 ? 'on' : ''}" data-v="${m}">${m}</button>`).join('')}</div></div>` : ''}
   <button class="btn" data-act="saveform">${isNew ? 'Сохранить бронь' : 'Сохранить изменения'}</button>
   <button class="btn ghost" data-act="close">Отмена</button>`);
   recalc();
+  refreshGuestBanner();
   if (dr && isNew) {
     const preAmt = dr.prepayFull ? (+val('f_total') || 0) : (+dr.prepay || 0);
     if (preAmt) document.getElementById('f_pre').value = preAmt;
@@ -828,10 +1125,34 @@ function openForm(b, pre) {
 }
 const val = id => (document.getElementById(id) || {}).value || '';
 function recalc() {
-  const n = val('f_in') && val('f_out') ? diff(val('f_in'), val('f_out')) : 0;
-  const pn = +val('f_pn') || 0;
-  if (!form.totalTouched && pn && n > 0) document.getElementById('f_total').value = pn * n;
-  document.getElementById('f_nights').textContent = n > 0 ? n + ' ' + nightsWord(n) : 'Выезд должен быть позже заезда';
+  if (!form) return;
+  const inD = val('f_in'), outD = val('f_out'), n = inD && outD ? diff(inD, outD) : 0;
+  const tot = document.getElementById('f_total'), hint = document.getElementById('f_nights');
+  if (n <= 0) { hint.textContent = 'Выезд должен быть позже заезда'; return; }
+  const sp = FIN.stayPrice(cfg, form.cabin, inD, outD);
+  if (!form.totalTouched) {
+    const v = form.fixedPN ? form.fixedPN * n : sp.total;
+    tot.value = v || '';
+  }
+  const groups = {};
+  sp.nights.forEach(x => { groups[x.price] = (groups[x.price] || 0) + 1; });
+  const parts = Object.entries(groups).map(([p, c]) => (c > 1 ? c + ' × ' : '') + money(+p));
+  hint.textContent = n + ' ' + nightsWord(n) + (sp.total ? ' · по ценам: ' + parts.join(' + ') + ' = ' + money(sp.total) : ' · цены за ночь можно задать в настройках');
+  const total = +tot.value || 0;
+  if (!form.commTouched) document.getElementById('f_comm').value = FIN.commissionFor(cfg, form.source, total) || '';
+  if (!form.cleanTouched) document.getElementById('f_clean').value = +cabin(form.cabin).cleaning || '';
+  const net = total - (+val('f_comm') || 0) - (+val('f_clean') || 0);
+  document.getElementById('f_net').textContent = total ? 'Чистыми с брони: ' + money(net) : '';
+}
+function refreshGuestBanner() {
+  const el = document.getElementById('f_gbanner'); if (!el || !form) return;
+  const gi = guestInfo(val('f_name'), val('f_phone'), form.b.id);
+  el.innerHTML = guestBanner(gi);
+  if (gi && gi.visits && form.isNew && !form.source) {
+    form.source = 'Постоянный клиент';
+    document.querySelectorAll('#f_source button').forEach(x => x.classList.toggle('on', x.dataset.v === form.source));
+    recalc();
+  }
 }
 async function saveForm() {
   const err = document.getElementById('ferr');
@@ -841,24 +1162,112 @@ async function saveForm() {
   if (!inD || !outD || diff(inD, outD) <= 0) return showErr('Выезд должен быть позже заезда');
   const clash = bookings.find(x => x.id !== form.b.id && x.cabin == form.cabin && x.inDate < outD && inD < x.outDate);
   if (clash) return showErr(`${cabin(form.cabin).name} уже занят: ${clash.name}, ${fd(clash.inDate)} – ${fd(clash.outDate)}`);
+  const total = +val('f_total') || 0, n = diff(inD, outD), depAmt = +val('f_dep') || 0;
   const b = { ...form.b, name, phone: val('f_phone').trim(), cabin: form.cabin, inDate: inD, outDate: outD, inTime: val('f_intime'), outTime: val('f_outtime'),
-    adults: +val('f_ad') || 0, kids: +val('f_kids') || 0, perNight: +val('f_pn') || 0, total: +val('f_total') || 0, source: form.source || '', note: val('f_note').trim() };
+    adults: +val('f_ad') || 0, kids: +val('f_kids') || 0, total, perNight: n ? Math.round(total / n) : 0, source: form.source || '', note: val('f_note').trim(),
+    commission: val('f_comm') === '' ? 0 : +val('f_comm'), cleanCost: val('f_clean') === '' ? 0 : +val('f_clean') };
+  b.deposit = depAmt > 0 ? Object.assign({ status: 'held' }, form.b.deposit || {}, { amount: depAmt }) : null;
   if (form.isNew) {
     b.created = today();
     const pre = +val('f_pre') || 0;
     if (pre > 0) b.payments = [{ id: uid(), amount: pre, method: document.querySelector('#f_pmethod .on').dataset.v, date: today(), note: 'предоплата' }];
   }
   await saveBooking(b); haptic(); toast(form.isNew ? 'Бронь сохранена' : 'Изменения сохранены');
+  form = null;
   openCard(b.id);
 }
 
-/* --- Guest sheet --- */
+/* --- Шаблоны сообщений --- */
+const DEFAULT_TPL = [
+  { name: 'Подтверждение брони', text: 'Здравствуйте, {имя}! Бронь подтверждена: {домик}, заезд {заезд} с {время_заезда}, выезд {выезд} до {время_выезда} ({ночей}). Стоимость — {сумма}. Ждём вас!' },
+  { name: 'Реквизиты для оплаты', text: 'Здравствуйте, {имя}! К оплате: {долг}. Реквизиты: [ВПИШИТЕ НОМЕР КАРТЫ ИЛИ ТЕЛЕФОН ДЛЯ ПЕРЕВОДА]. Пришлите, пожалуйста, скриншот после оплаты.' },
+  { name: 'Как добраться', text: '{имя}, ждём вас {заезд} с {время_заезда}! Адрес: [ВПИШИТЕ АДРЕС]. [КАК ПРОЕХАТЬ, ГДЕ ПАРКОВКА]. Позвоните, когда будете подъезжать.' },
+  { name: 'Wi-Fi и правила', text: 'Добро пожаловать в {домик}! Wi-Fi: [СЕТЬ] / пароль [ПАРОЛЬ]. Выезд до {время_выезда}. [ПРАВИЛА: курение, животные, тишина после 23:00].' },
+  { name: 'Просьба об отзыве', text: 'Спасибо, что были у нас, {имя}! Будем очень рады вашему отзыву — это нам очень помогает: [ССЫЛКА НА ОТЗЫВ]. Ждём вас снова!' }
+];
+const tplList = () => (cfg.templates && cfg.templates.length ? cfg.templates : DEFAULT_TPL);
+function fillTpl(text, b) {
+  const n = diff(b.inDate, b.outDate);
+  const map = { 'имя': short(b.name), 'домик': cabin(b.cabin).name, 'заезд': fd(b.inDate), 'выезд': fd(b.outDate), 'время_заезда': b.inTime || '14:00', 'время_выезда': b.outTime || '12:00',
+    'ночей': n + ' ' + nightsWord(n), 'сумма': money(b.total), 'оплачено': money(paid(b)), 'долг': money(debt(b)), 'залог': b.deposit && +b.deposit.amount ? money(b.deposit.amount) : 'без залога' };
+  return String(text || '').replace(/\{([а-яё_]+)\}/gi, (m, k) => map[k.toLowerCase()] != null ? map[k.toLowerCase()] : m);
+}
+function openTemplates(id) {
+  const b = bookings.find(x => x.id === id); if (!b) return;
+  const ph = digits(b.phone);
+  openSheet(`
+  <div><div class="sub">${esc(b.name)} · ${esc(cabin(b.cabin).name)}</div><h1 style="font-size:24px">Сообщение гостю</h1></div>
+  <div class="hint">Текст можно поправить перед отправкой. Сами шаблоны меняются в настройках.</div>
+  ${tplList().map((x, i) => `<div class="card" style="gap:8px">
+    <label class="t" for="tpl_${i}">${esc(x.name)}</label>
+    <textarea id="tpl_${i}" rows="4">${esc(fillTpl(x.text, b))}</textarea>
+    <div class="grid2">
+      <button class="btn small" style="width:100%" data-act="tplcopy" data-i="${i}">Скопировать</button>
+      ${ph ? `<button class="btn ghost small" style="width:100%" data-act="tplwa" data-i="${i}" data-ph="${ph}">WhatsApp</button>` : ''}
+    </div>
+    ${ph ? `<button class="linkbtn" data-act="tpltg" data-i="${i}" data-ph="${ph}">Скопировать и открыть чат в Telegram</button>` : ''}
+  </div>`).join('')}
+  <button class="btn ghost" data-act="card" data-id="${b.id}">Назад к брони</button>`);
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e) { return false; }
+}
+function openLink(url) { if (tg && tg.openLink) tg.openLink(url); else window.open(url, '_blank'); }
+
+/* --- Свободные даты --- */
+function freeText(days) {
+  const t = today(), lines = [];
+  cfg.cabins.forEach(c => {
+    const w = FIN.freeWindows(bookings, c.id, t, days);
+    lines.push(c.name + ': ' + (w.length ? w.map(x => { const n = diff(x.from, x.to); return (n === 1 ? fd(x.from) : fd(x.from) + ' – ' + fd(x.to)); }).join(', ') : 'всё занято'));
+  });
+  return 'Свободные даты на ближайшие ' + days + ' дней:\n\n' + lines.join('\n') + '\n\nДля брони пишите или звоните!';
+}
+function openFreeDates(days) {
+  days = days || ui.fdays || 30; ui.fdays = days;
+  openSheet(`
+  <div><div class="sub">Для объявлений и сторис</div><h1 style="font-size:24px">Свободные даты</h1></div>
+  <div class="seg">${[14, 30, 60, 90].map(n => `<button type="button" data-act="fdays" data-v="${n}" class="${n === days ? 'on' : ''}">${n} дней</button>`).join('')}</div>
+  <textarea id="fd_text" rows="9" aria-label="Текст со свободными датами">${esc(freeText(days))}</textarea>
+  <div class="hint">Даты «с – по» — это день заезда и день выезда. Текст можно поправить.</div>
+  <button class="btn" data-act="fdcopy">Скопировать текст</button>
+  <button class="btn ghost" data-act="close">Закрыть</button>`);
+}
+
+/* --- Расходы --- */
+function openExpense(id) {
+  const e = expenses.find(x => x.id === id) || { id: uid(), date: today(), amount: '', category: 'Покупки', cabin: 0, note: '' };
+  const isNew = !expenses.some(x => x.id === e.id);
+  openSheet(`
+  <h1 style="font-size:24px">${isNew ? 'Новый расход' : 'Расход'}</h1>
+  <div class="hint">Уборка и комиссии площадок считаются автоматически — сюда их вносить не нужно.</div>
+  <div class="grid2">
+    <div class="field"><label for="e_amount">Сумма, ₽</label><input id="e_amount" type="number" inputmode="numeric" value="${e.amount}"></div>
+    <div class="field"><label for="e_date">Дата</label><input id="e_date" type="date" value="${e.date}"></div>
+  </div>
+  <div class="field"><label>Статья</label><div class="seg" id="e_cat">${FIN.EXP_CATS.map(c => `<button type="button" data-act="pick" data-v="${c}" class="${c === e.category ? 'on' : ''}">${c}</button>`).join('')}</div></div>
+  <div class="field"><label>Домик</label><div class="seg" id="e_cab">${[['0', 'Общее']].concat(cfg.cabins.map(c => [String(c.id), c.name])).map(([v, n]) => `<button type="button" data-act="pick" data-v="${v}" class="${String(+e.cabin || 0) === v ? 'on' : ''}">${esc(n)}</button>`).join('')}</div></div>
+  <div class="field"><label for="e_note">Комментарий</label><input id="e_note" value="${esc(e.note)}" maxlength="80" placeholder="Например: простыни, 4 комплекта"></div>
+  <button class="btn" data-act="saveexp" data-id="${e.id}">Сохранить</button>
+  ${isNew ? '' : `<button class="btn danger" data-act="delexp" data-id="${e.id}">Удалить расход</button>`}
+  <button class="btn ghost" data-act="close">Отмена</button>`);
+}
+
+/* --- Гость --- */
 function openGuest(key) {
   const g = guestGroups().find(x => x.key === key); if (!g) return;
-  const ph = digits(g.phone);
+  const ph = digits(g.phone), gn = gnoteFor(key) || {};
   openSheet(`
   <div><div class="sub">Гость</div><h1 style="font-size:24px">${esc(g.name)}</h1><div class="s">${esc(g.phone || 'телефон не указан')}</div></div>
   <div class="grid2"><div class="kv" style="background:#fff"><span>Визитов</span><b>${g.list.length}</b></div><div class="kv" style="background:#fff"><span>Заплатил всего</span><b>${money(g.total)}</b></div></div>
+  <div class="card" style="gap:10px">
+    <div class="t">Отметка о госте</div>
+    <div class="seg" id="g_mark">${[['good', 'Отличный гость'], ['', 'Без отметки'], ['bad', 'Проблемный']].map(([v, n]) => `<button type="button" data-act="pick" data-v="${v}" class="${(gn.mark || '') === v ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <textarea id="g_note" rows="2" maxlength="200" placeholder="Заметка: шумели, разбили, просили скидку, очень аккуратные…" aria-label="Заметка о госте">${esc(gn.note || '')}</textarea>
+    <button class="btn small" style="width:100%" data-act="gsave" data-key="${esc(key)}">Сохранить отметку</button>
+    <div class="hint">Если гость с отметкой забронирует снова, приложение покажет предупреждение.</div>
+  </div>
   ${ph ? `<div class="grid2"><a class="btn ghost" href="tel:+${ph}">${ICON.phone}Позвонить</a><button class="btn ghost" data-act="write" data-ph="${ph}">${ICON.send}Написать</button></div>` : ''}
   <h2>Брони</h2>
   <div class="list">${g.list.sort(byIn).reverse().map(b => `
@@ -867,28 +1276,62 @@ function openGuest(key) {
   <button class="btn" data-act="newfor" data-key="${esc(key)}">${ICON.plus}Новая бронь для гостя</button>`);
 }
 
-/* --- Settings --- */
+/* --- Настройки --- */
 function openSettings() {
+  const pl = cfg.platforms || {};
   openSheet(`
   <h1 style="font-size:24px">Настройки</h1>
-  <div class="hint">Названия домиков и обычная цена за ночь. Цена подставляется в новую бронь, её всегда можно поменять.</div>
+  <h2>Домики, цены и уборка</h2>
+  <div class="hint">Будни — обычная цена за ночь. Выходные — ночи с пятницы на субботу и с субботы на воскресенье. Сезон и праздники — по датам ниже. Пустое поле — берётся обычная цена.</div>
   <div class="list" id="s_list">${cfg.cabins.map(c => `
     <div class="card" style="gap:8px;padding:14px">
-      <input data-sid="${c.id}" data-k="name" value="${esc(c.name)}" maxlength="30" aria-label="Название">
-      <input data-sid="${c.id}" data-k="price" type="number" inputmode="numeric" value="${c.price || ''}" placeholder="Цена за ночь, ₽" aria-label="Цена за ночь">
+      <input data-sid="${c.id}" data-k="name" value="${esc(c.name)}" maxlength="30" aria-label="Название домика" style="font-weight:700">
+      <div class="grid2">
+        ${[['price', 'Будни, ₽'], ['weekend', 'Выходные, ₽'], ['high', 'Сезон, ₽'], ['holiday', 'Праздники, ₽'], ['cleaning', 'Уборка, ₽']].map(([k, l]) => `
+        <div class="field"><label for="s_${c.id}_${k}">${l}</label><input id="s_${c.id}_${k}" data-sid="${c.id}" data-k="${k}" type="number" inputmode="numeric" value="${c[k] || ''}"></div>`).join('')}
+      </div>
     </div>`).join('')}</div>
   <button class="btn ghost" data-act="addcabin">${ICON.plus}Добавить домик</button>
-  <button class="btn" data-act="savesettings">Сохранить</button>
-  <div class="hint" style="text-align:center">${serverOK ? 'Брони и дела сохраняются на сервере, бот присылает напоминания о заездах и выездах.' : cloudOK ?'Данные хранятся в вашем аккаунте Telegram и видны только вам — на любом вашем устройстве.' : 'Сейчас приложение открыто не в Telegram: данные сохраняются только в этом браузере.'}</div>`);
+  <h2>Сезон и праздники</h2>
+  <div class="field"><label for="s_high">Высокий сезон (даты через запятую)</label><input id="s_high" value="${esc(cfg.high || '')}" placeholder="01.06-31.08"></div>
+  <div class="field"><label for="s_hol">Праздники</label><input id="s_hol" value="${esc(cfg.holidays || '')}" placeholder="31.12, 01.01-08.01, 08.03, 01.05-03.05, 09.05"></div>
+  <h2>Комиссии площадок</h2>
+  <div class="hint">Процент от стоимости брони и/или фиксированная плата за бронь. Считается автоматически по полю «Откуда гость».</div>
+  <div class="card" style="gap:10px" id="s_plat">${FIN.SOURCES.map(s => `
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 84px 96px;gap:8px;align-items:center">
+      <span class="t" style="font-size:14px">${s}</span>
+      <input data-plat="${s}" data-k="pct" type="number" inputmode="decimal" value="${(pl[s] && pl[s].pct) || ''}" placeholder="%" aria-label="${s}: процент">
+      <input data-plat="${s}" data-k="fixed" type="number" inputmode="numeric" value="${(pl[s] && pl[s].fixed) || ''}" placeholder="₽ за бронь" aria-label="${s}: рублей за бронь">
+    </div>`).join('')}</div>
+  <h2>Цель на месяц</h2>
+  <div class="field"><label for="s_goal">Сколько хотите зарабатывать в месяц (доход), ₽</label><input id="s_goal" type="number" inputmode="numeric" value="${cfg.goal || ''}"></div>
+  <h2>Шаблоны сообщений гостям</h2>
+  <div class="hint">Подстановки: {имя} {домик} {заезд} {выезд} {время_заезда} {время_выезда} {ночей} {сумма} {оплачено} {долг} {залог}. Замените [ТЕКСТ В СКОБКАХ] на свой.</div>
+  <div class="list" id="s_tpl">${tplList().map((x, i) => `
+    <div class="card" style="gap:8px;padding:14px">
+      <input data-tpl="${i}" data-k="name" value="${esc(x.name)}" maxlength="40" aria-label="Название шаблона" style="font-weight:700">
+      <textarea data-tpl="${i}" data-k="text" rows="4" aria-label="Текст шаблона">${esc(x.text)}</textarea>
+    </div>`).join('')}</div>
+  <button class="btn" data-act="savesettings">Сохранить настройки</button>
+  <div class="hint" style="text-align:center">${serverOK ? 'Всё сохраняется на сервере, бот присылает напоминания и отчёты.' : cloudOK ? 'Данные хранятся в вашем аккаунте Telegram и видны только вам — на любом вашем устройстве.' : 'Сейчас приложение открыто не в Telegram: данные сохраняются только в этом браузере.'}</div>`);
 }
 function readSettings() {
   document.querySelectorAll('#s_list [data-sid]').forEach(inp => {
     const c = cfg.cabins.find(x => x.id == inp.dataset.sid); if (!c) return;
-    if (inp.dataset.k === 'name') c.name = inp.value.trim() || c.name; else c.price = +inp.value || 0;
+    if (inp.dataset.k === 'name') c.name = inp.value.trim() || c.name; else c[inp.dataset.k] = +inp.value || 0;
   });
+  const el = document.getElementById('s_high'); if (!el) return;
+  cfg.high = el.value.trim(); cfg.holidays = val('s_hol').trim(); cfg.goal = +val('s_goal') || 0;
+  const pl = {};
+  document.querySelectorAll('#s_plat [data-plat]').forEach(inp => { const s = inp.dataset.plat; pl[s] = pl[s] || {}; pl[s][inp.dataset.k] = +String(inp.value).replace(',', '.') || 0; });
+  cfg.platforms = pl;
+  const tp = tplList().map(x => ({ ...x }));
+  document.querySelectorAll('#s_tpl [data-tpl]').forEach(inp => { tp[+inp.dataset.tpl][inp.dataset.k] = inp.value; });
+  cfg.templates = tp.filter(x => String(x.text).trim());
 }
 
 /* ===== Events ===== */
+const onOf = sel => { const el = document.querySelector(sel + ' .on'); return el ? el.dataset.v : ''; };
 const ACT = {
   parse: () => doParse(),
   mic: () => startMic(),
@@ -901,32 +1344,29 @@ const ACT = {
   addtask: async () => {
     const text = val('t_text').trim();
     if (!text) { toast('Напишите, что нужно сделать'); haptic('error'); return; }
-    const cab = +((document.querySelector('#t_cabin .on') || {}).dataset || {}).v || 0;
-    await saveTask({ id: uid(), text: text[0].toUpperCase() + text.slice(1), cabin: cab, important: document.getElementById('t_imp').classList.contains('on'), done: false, created: today() });
+    await saveTask({ id: uid(), text: text[0].toUpperCase() + text.slice(1), cabin: +onOf('#t_cabin') || 0, important: document.getElementById('t_imp').classList.contains('on'), done: false, created: today() });
     haptic(); toast('Дело добавлено'); render(true);
   },
   toggleimp: (d, el) => el.classList.toggle('on'),
-  toggletask: async d => { const x = tasks.find(t => t.id === d.id); if (!x) return; const n = { ...x, done: !x.done, doneDate: !x.done ? today() : '' }; await saveTask(n); haptic(); render(true); },
+  toggletask: async d => { const x = tasks.find(t => t.id === d.id); if (!x) return; await saveTask({ ...x, done: !x.done, doneDate: !x.done ? today() : '' }); haptic(); render(true); },
   deltask: async d => { if (await confirmBox('Удалить это дело?')) { await removeTask(d.id); render(true); } },
   tfilter: d => { ui.tf = d.v; render(true); },
   showdone: () => { ui.showDone = !ui.showDone; render(true); },
-  tab: d => { ui.tab = d.tab; if (!document.getElementById('sheet').hidden) closeSheet(); else render(); },
-  close: () => closeSheet(),
+  tab: d => { ui.tab = d.tab; if (!document.getElementById('sheet').hidden) { document.getElementById('sheet').hidden = true; document.body.style.overflow = ''; if (tg && ver('6.1')) tg.BackButton.hide(); } render(); },
+  close: () => { form = null; closeSheet(); },
   settings: () => openSettings(),
   new: d => openForm(null, { cabin: d.cabin, date: d.date }),
   card: d => openCard(d.id),
   guest: d => openGuest(d.key),
-  newfor: d => { const g = guestGroups().find(x => x.key === d.key); openForm(null, {}); if (g) { document.getElementById('f_name').value = g.name; document.getElementById('f_phone').value = g.phone || ''; form.source = 'Повторно'; document.querySelectorAll('#f_source button').forEach(x => x.classList.toggle('on', x.dataset.v === 'Повторно')); } },
+  newfor: d => { const g = guestGroups().find(x => x.key === d.key); openForm(null, g ? { name: g.name, phone: g.phone, source: 'Постоянный клиент' } : {}); },
   calmove: d => { ui.calStart = addDays(ui.calStart || today(), +d.n); render(); },
   caltoday: () => { ui.calStart = null; render(); },
-  monthmove: d => { const [y, m] = (ui.month || today().slice(0, 7)).split('-').map(Number); const x = new Date(y, m - 1 + +d.n, 1); ui.month = x.getFullYear() + '-' + pad(x.getMonth() + 1); render(); },
-  fcabin: (d, el) => {
-    const old = form.cabin; form.cabin = +d.v;
-    el.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === el));
-    const pn = document.getElementById('f_pn');
-    if (!+pn.value || +pn.value === +cabin(old).price) { pn.value = cabin(form.cabin).price || ''; recalc(); }
-  },
-  fsource: (d, el) => { const on = !el.classList.contains('on'); el.parentNode.querySelectorAll('button').forEach(x => x.classList.remove('on')); el.classList.toggle('on', on); form.source = on ? d.v : ''; },
+  monthmove: d => { ui.month = ymShift(ui.month || today().slice(0, 7), +d.n); render(); },
+  yearmove: d => { ui.year = (ui.year || +today().slice(0, 4)) + +d.n; render(); },
+  mview: d => { ui.mview = d.v; render(); },
+  openmonth: d => { ui.mview = 'month'; ui.month = d.m; render(); },
+  fcabin: (d, el) => { form.cabin = +d.v; el.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === el)); recalc(); },
+  fsource: (d, el) => { const on = !el.classList.contains('on'); el.parentNode.querySelectorAll('button').forEach(x => x.classList.remove('on')); el.classList.toggle('on', on); form.source = on ? d.v : ''; recalc(); },
   pick: (d, el) => el.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === el)),
   saveform: () => saveForm(),
   edit: d => openForm(bookings.find(x => x.id === d.id)),
@@ -938,7 +1378,7 @@ const ACT = {
   savepay: async d => {
     const b = bookings.find(x => x.id === d.id); const amount = +val('p_amount');
     if (!(amount > 0)) { toast('Впишите сумму'); haptic('error'); return; }
-    b.payments = (b.payments || []).concat({ id: uid(), amount, method: document.querySelector('#p_method .on').dataset.v, date: val('p_date') || today(), note: val('p_note').trim() });
+    b.payments = (b.payments || []).concat({ id: uid(), amount, method: onOf('#p_method') || 'перевод', date: val('p_date') || today(), note: val('p_note').trim() });
     await saveBooking(b); haptic(); toast('Оплата записана'); openCard(b.id);
   },
   delpay: async d => {
@@ -946,6 +1386,45 @@ const ACT = {
     if (await confirmBox('Удалить эту оплату?')) { b.payments = b.payments.filter(p => p.id !== d.pid); await saveBooking(b); openCard(b.id); }
   },
   write: d => { const url = 'https://t.me/+' + d.ph; if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank'); },
+  /* залог */
+  depkeepshow: () => { document.getElementById('depform').style.display = 'flex'; document.getElementById('depbtns').style.display = 'none'; },
+  depret: async d => { const b = bookings.find(x => x.id === d.id); b.deposit = { ...b.deposit, status: 'returned', kept: 0, date: today() }; await saveBooking(b); haptic(); toast('Залог возвращён'); openCard(b.id); },
+  depkeep: async d => {
+    const b = bookings.find(x => x.id === d.id), kept = Math.min(+val('dep_kept') || 0, +b.deposit.amount || 0);
+    if (!(kept > 0)) { toast('Впишите сумму'); haptic('error'); return; }
+    b.deposit = { ...b.deposit, status: 'kept', kept, reason: val('dep_reason').trim(), date: today() }; await saveBooking(b); haptic(); toast('Удержание записано'); openCard(b.id);
+  },
+  depreset: async d => { const b = bookings.find(x => x.id === d.id); b.deposit = { amount: b.deposit.amount, status: 'held' }; await saveBooking(b); openCard(b.id); },
+  /* уборка */
+  cleandone: async d => { const b = bookings.find(x => x.id === d.id); b.clean = { ...(b.clean || {}), done: true, by: val('cl_by').trim(), date: today() }; await saveBooking(b); haptic(); toast('Отмечено: убрано'); openCard(b.id); },
+  cleanquick: async d => { const b = bookings.find(x => x.id === d.id); b.clean = { ...(b.clean || {}), done: true, date: today() }; await saveBooking(b); haptic(); toast(cabin(b.cabin).name + ': убрано'); render(true); },
+  cleanpaid: async d => { const b = bookings.find(x => x.id === d.id); b.clean = { ...(b.clean || {}), paid: !(b.clean && b.clean.paid) }; await saveBooking(b); haptic(); openCard(b.id); },
+  /* шаблоны */
+  tpl: d => openTemplates(d.id),
+  tplcopy: async d => { toast(await copyText(val('tpl_' + d.i)) ? 'Скопировано' : 'Не получилось скопировать'); haptic(); },
+  tplwa: d => openLink('https://wa.me/' + d.ph + '?text=' + encodeURIComponent(val('tpl_' + d.i))),
+  tpltg: async d => { await copyText(val('tpl_' + d.i)); toast('Текст скопирован — вставьте его в чат'); ACT.write(d); },
+  /* свободные даты */
+  freedates: () => openFreeDates(),
+  fdays: d => openFreeDates(+d.v),
+  fdcopy: async () => { toast(await copyText(val('fd_text')) ? 'Скопировано' : 'Не получилось скопировать'); haptic(); },
+  /* расходы */
+  newexp: () => openExpense(),
+  editexp: d => openExpense(d.id),
+  saveexp: async d => {
+    const amount = +val('e_amount') || 0;
+    if (!(amount > 0)) { toast('Впишите сумму'); haptic('error'); return; }
+    await saveItem('expenses', { id: d.id, amount, date: val('e_date') || today(), category: onOf('#e_cat') || 'Другое', cabin: +onOf('#e_cab') || 0, note: val('e_note').trim() });
+    haptic(); toast('Расход сохранён'); closeSheet();
+  },
+  delexp: async d => { if (await confirmBox('Удалить этот расход?')) { await removeItem('expenses', d.id); closeSheet(); } },
+  /* отметки гостей */
+  gsave: async d => {
+    const mark = onOf('#g_mark'), note = val('g_note').trim(), id = gidOf(d.key);
+    if (!mark && !note) await removeItem('gnotes', id); else await saveItem('gnotes', { id, key: d.key, mark, note });
+    haptic(); toast('Сохранено'); openGuest(d.key);
+  },
+  /* настройки */
   addcabin: () => { readSettings(); const id = Math.max(0, ...cfg.cabins.map(c => c.id)) + 1; cfg.cabins.push({ id, name: 'Домик ' + id, price: 0 }); openSettings(); },
   savesettings: async () => { readSettings(); await saveCfg(); haptic(); toast('Сохранено'); closeSheet(); }
 };
@@ -955,13 +1434,16 @@ document.addEventListener('click', e => {
   e.preventDefault(); f(el.dataset, el);
 });
 document.addEventListener('input', e => {
-  if (e.target.id === 'q') { ui.q = e.target.value; renderGuestList(); }
-  if (e.target.id === 'qi') ui.qtext = e.target.value;
-  if (['f_in', 'f_out', 'f_pn'].includes(e.target.id)) {
-    if (e.target.id === 'f_in' && val('f_out') <= val('f_in')) document.getElementById('f_out').value = addDays(val('f_in'), 1);
-    recalc();
-  }
-  if (e.target.id === 'f_total') form.totalTouched = true;
+  const id = e.target.id;
+  if (id === 'q') { ui.q = e.target.value; renderGuestList(); }
+  if (id === 'qi') ui.qtext = e.target.value;
+  if (!form) return;
+  if (id === 'f_in' && val('f_out') <= val('f_in')) document.getElementById('f_out').value = addDays(val('f_in'), 1);
+  if (id === 'f_total') form.totalTouched = true;
+  if (id === 'f_comm') form.commTouched = true;
+  if (id === 'f_clean') form.cleanTouched = true;
+  if (['f_in', 'f_out', 'f_total', 'f_comm', 'f_clean'].includes(id)) recalc();
+  if (id === 'f_name' || id === 'f_phone') refreshGuestBanner();
 });
 
 document.addEventListener('keydown', e => { if (e.target.id === 'qi' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doParse(); } });

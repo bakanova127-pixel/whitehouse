@@ -48,6 +48,7 @@ function setup() {
     { command: 'week', description: 'Заезды на неделю' },
     { command: 'debts', description: 'Кто должен' },
     { command: 'tasks', description: 'Дела по домикам' },
+    { command: 'report', description: 'Отчёт за текущий месяц' },
     { command: 'export', description: 'Таблица со всеми бронями' }
   ] });
   tg('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Домики', web_app: { url: appUrl('') } } });
@@ -92,6 +93,12 @@ function dailyReminders() {
     const d = addDays(t, n);
     bs.filter(b => b.outDate === d).forEach(b => owners.forEach(o => sendCheckout(o, b, n, bs)));
   });
+  const cfg = getCfg();
+  if (slot === 'evening') bs.filter(b => b.outDate === t).forEach(b => owners.forEach(o => send(o, checkoutReportText(b, cfg), { inline_keyboard: [[{ text: 'Открыть бронь', web_app: { url: appUrl('&b=' + encodeURIComponent(b.id)) } }]] })));
+  if (slot === 'morning' && t.slice(8) === '01') {
+    const prev = addDays(t, -1).slice(0, 7);
+    owners.forEach(o => send(o, monthReportText(prev, cfg, bs, allItems('expenses')), { inline_keyboard: [[{ text: 'Открыть отчёт', web_app: { url: appUrl('&tab=money') } }]] }));
+  }
 }
 
 function sendCheckout(chat, b, n, bs) {
@@ -132,6 +139,8 @@ function sendReminder(chat, b, n) {
   ];
   if (b.source) lines.push('📍 Откуда: ' + esc(b.source));
   if (b.note) lines.push('📝 ' + esc(b.note));
+  const cw = cleaningWarn(b, allBookings(), todayStr());
+  if (cw) lines.push('', cw);
   const tl = openTasks(b.cabin);
   if (tl.length) lines.push('', '🛠 <b>Не забыть в домике до заезда:</b>', tl.map(x => '• ' + esc(x.text) + (x.important ? ' ❗️' : '')).join('\n'));
   send(chat, lines.join('\n'), { inline_keyboard: [[{ text: 'Открыть бронь', web_app: { url: appUrl('&b=' + encodeURIComponent(b.id)) } }]] });
@@ -187,6 +196,7 @@ function handleUpdate(u) {
   if (cmd === '/users') {
     return send(id, '👥 Доступ к боту:\n' + owners.map((x, i) => '• <code>' + x + '</code>' + (i === 0 ? ' — владелец' : '') + (x === id ? ' (вы)' : '')).join('\n') + (owners.length > 1 ? '\n\nУбрать: <code>/remove ID</code>' : ''));
   }
+  if (cmd === '/report') { const a = text.split(/\s+/)[1] || '', ym = /^\d{4}-\d{2}$/.test(a) ? a : todayStr().slice(0, 7); return send(id, monthReportText(ym, getCfg(), allBookings(), allItems('expenses')), openKb('&tab=money')); }
   if (cmd === '/export') return send(id, '📊 Все брони и дела — в Google-таблице:\n' + sheet().getParent().getUrl());
   if (cmd === '/start') {
     send(id, '👋 Привет' + (msg.from.first_name ? ', ' + esc(msg.from.first_name) : '') + '!\n\n' +
@@ -323,7 +333,9 @@ function appApi(body) {
   lock.waitLock(20000);
   try {
     switch (body.action) {
-      case 'load': return { ok: true, cfg: storedCfg(), bookings: allBookings(), tasks: allTasks() };
+      case 'load': return { ok: true, cfg: storedCfg(), bookings: allBookings(), tasks: allTasks(), expenses: allItems('expenses'), gnotes: allItems('gnotes') };
+      case 'saveItem': saveItemRow(body.kind, body.item); return { ok: true };
+      case 'deleteItem': deleteItemRow(body.kind, body.id); return { ok: true };
       case 'save': saveRow(body.booking); return { ok: true };
       case 'delete': deleteRow(body.id); return { ok: true };
       case 'saveTask': saveTaskRow(body.task); return { ok: true };
@@ -333,6 +345,7 @@ function appApi(body) {
         if (body.cfg && !storedCfg()) setCfg(body.cfg);
         (body.bookings || []).forEach(saveRow);
         (body.tasks || []).forEach(saveTaskRow);
+        ['expenses', 'gnotes'].forEach(k => (body[k] || []).forEach(x => saveItemRow(k, x)));
         return { ok: true };
     }
     return { ok: false, error: 'action' };
@@ -439,6 +452,30 @@ function saveTaskRow(x) {
   sh.getRange(r > 0 ? r : sh.getLastRow() + 1, 1, 1, HEAD_T.length).setValues([row]);
 }
 function deleteTaskRow(id) { const sh = taskSheet(), r = findRow(sh, id); if (r > 0) sh.deleteRow(r); }
+
+/* --- Расходы и отметки гостей --- */
+const ITEM_SHEETS = { expenses: ['Расходы', ['id', 'Дата', 'Статья', 'Домик', 'Сумма', 'Комментарий', 'data']], gnotes: ['Отметки гостей', ['id', 'Гость', 'Отметка', 'Заметка', 'data']] };
+function itemSheet(kind) {
+  const def = ITEM_SHEETS[kind]; if (!def) throw new Error('kind');
+  const ss = sheet().getParent();
+  let sh = ss.getSheetByName(def[0]);
+  if (!sh) { sh = ss.insertSheet(def[0]); sh.getRange('A:G').setNumberFormat('@'); sh.getRange(1, 1, 1, def[1].length).setValues([def[1]]).setFontWeight('bold'); sh.setFrozenRows(1); sh.hideColumns(1); sh.hideColumns(def[1].length); }
+  return sh;
+}
+function allItems(kind) {
+  const sh = itemSheet(kind), n = sh.getLastRow() - 1, w = ITEM_SHEETS[kind][1].length;
+  if (n < 1) return [];
+  return sh.getRange(2, w, n, 1).getValues().map(r => { try { return JSON.parse(r[0]); } catch (e) { return null; } }).filter(Boolean);
+}
+function saveItemRow(kind, x) {
+  if (!x || !x.id || !ITEM_SHEETS[kind]) return;
+  const sh = itemSheet(kind), r = findRow(sh, x.id), cfg = getCfg();
+  const ru = s => s ? String(s).split('-').reverse().join('.') : '';
+  const row = kind === 'expenses' ? [x.id, ru(x.date), x.category || '', +x.cabin ? cabinName(x.cabin, cfg) : 'Общее', String(+x.amount || 0), x.note || '', JSON.stringify(x)]
+    : [x.id, x.key || '', x.mark === 'bad' ? 'проблемный' : x.mark === 'good' ? 'отличный' : '', x.note || '', JSON.stringify(x)];
+  sh.getRange(r > 0 ? r : sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+}
+function deleteItemRow(kind, id) { if (!ITEM_SHEETS[kind]) return; const sh = itemSheet(kind), r = findRow(sh, id); if (r > 0) sh.deleteRow(r); }
 
 function refreshNames() {
   const sh = sheet(), n = sh.getLastRow() - 1, cfg = getCfg();
@@ -636,4 +673,151 @@ function parseText(raw, t, cabins) {
     booking: { name, phone, cabin, inDate: inD ? iso(inD) : '', outDate: outD ? iso(outD) : '', inTime, outTime, adults, kids, perNight, total, prepay, prepayFull, prepayMethod, source, note },
     task: { text: taskText, cabin: cabin == null ? 0 : cabin, important }
   };
+}
+
+/* ===== Финансы (общий модуль для приложения и бота) ===== */
+const FIN = (() => {
+  const P2 = n => String(n).padStart(2, '0');
+  const pd = s => { const a = String(s).split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
+  const iso = d => d.toISOString().slice(0, 10);
+  const add = (s, n) => { const d = pd(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
+  const nightsBetween = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
+  const SOURCES = ['Авито', 'Суточно.ру', 'Сарафанное радио', 'Постоянный клиент', 'Соцсети', 'Другое'];
+  const OLD = { 'Суточно': 'Суточно.ру', 'Знакомые': 'Сарафанное радио', 'Повторно': 'Постоянный клиент' };
+  const normSource = s => OLD[s] || s || 'Не указано';
+  const EXP_CATS = ['Коммуналка', 'Ремонт', 'Покупки', 'Реклама', 'Связь и интернет', 'Налоги', 'Другое'];
+  const paidOf = b => (b.payments || []).reduce((s, p) => s + (+p.amount || 0), 0);
+  const cab = (cfg, id) => ((cfg && cfg.cabins) || []).find(c => c.id == id) || {};
+
+  /* «01.06-31.08, 31.12, 01.01-08.01» → [{from:'06-01', to:'08-31'}, …] */
+  function parseRanges(text) {
+    const out = [];
+    String(text || '').split(/[,;\n]+/).forEach(part => {
+      const m = part.match(/(\d{1,2})[.\/](\d{1,2})(?:\s*[-–—]\s*(\d{1,2})[.\/](\d{1,2}))?/);
+      if (!m) return;
+      const a = P2(+m[2]) + '-' + P2(+m[1]);
+      const b = m[3] ? P2(+m[4]) + '-' + P2(+m[3]) : a;
+      out.push({ from: a, to: b });
+    });
+    return out;
+  }
+  const inRanges = (md, rs) => rs.some(r => r.from <= r.to ? (md >= r.from && md <= r.to) : (md >= r.from || md <= r.to));
+
+  /* Цена одной ночи (ночь начинается в дату date) */
+  function nightPrice(cfg, cabinId, date) {
+    const c = cab(cfg, cabinId), base = +c.price || 0, md = date.slice(5);
+    const dow = pd(date).getUTCDay(), we = dow === 5 || dow === 6;
+    if (inRanges(md, parseRanges(cfg && cfg.holidays))) return +c.holiday || +c.high || (we && +c.weekend) || base;
+    if (inRanges(md, parseRanges(cfg && cfg.high))) return +c.high || (we && +c.weekend) || base;
+    return (we && +c.weekend) || base;
+  }
+  function stayPrice(cfg, cabinId, inD, outD) {
+    const list = [];
+    for (let d = inD; d < outD && list.length < 400; d = add(d, 1)) list.push({ date: d, price: nightPrice(cfg, cabinId, d) });
+    return { total: list.reduce((s, x) => s + x.price, 0), nights: list };
+  }
+  function commissionFor(cfg, source, total) {
+    const p = ((cfg && cfg.platforms) || {})[normSource(source)] || {};
+    return Math.round((+total || 0) * (+p.pct || 0) / 100 + (+p.fixed || 0));
+  }
+  const has = v => v !== undefined && v !== null && v !== '';
+  function fin(b, cfg) {
+    const kept = b.deposit && b.deposit.status === 'kept' ? (+b.deposit.kept || 0) : 0;
+    const revenue = (+b.total || 0) + kept;
+    const clean = has(b.cleanCost) ? +b.cleanCost : (+cab(cfg, b.cabin).cleaning || 0);
+    const commission = has(b.commission) ? +b.commission : commissionFor(cfg, b.source, +b.total || 0);
+    const p = paidOf(b);
+    return { revenue, kept, clean, commission, net: revenue - clean - commission, paid: p, debt: Math.max(0, (+b.total || 0) - p), nights: nightsBetween(b.inDate, b.outDate) };
+  }
+  function monthRange(ym) {
+    const a = ym.split('-').map(Number), last = new Date(Date.UTC(a[0], a[1], 0)).getUTCDate();
+    return [ym + '-01', ym + '-' + P2(last)];
+  }
+  /* Отчёт за период: брони засчитываются по дате выезда, загрузка — по ночам внутри периода */
+  function report(cfg, bookings, expenses, from, to) {
+    const end = add(to, 1), days = nightsBetween(from, end);
+    const blank = () => ({ revenue: 0, clean: 0, commission: 0, expenses: 0, net: 0, nights: 0, count: 0, kept: 0 });
+    const tot = blank(), sources = {}, cats = {};
+    const cabins = ((cfg && cfg.cabins) || []).map(c => Object.assign(blank(), { id: c.id, name: c.name, occNights: 0 }));
+    const bs = (bookings || []).filter(b => b.outDate >= from && b.outDate <= to);
+    bs.forEach(b => {
+      const f = fin(b, cfg), c = cabins.find(x => x.id == b.cabin);
+      [tot, c].forEach(o => { if (!o) return; o.revenue += f.revenue; o.clean += f.clean; o.commission += f.commission; o.nights += f.nights; o.count++; o.kept += f.kept; });
+      const s = normSource(b.source), so = sources[s] || (sources[s] = { name: s, count: 0, revenue: 0, commission: 0, net: 0 });
+      so.count++; so.revenue += f.revenue; so.commission += f.commission; so.net += f.revenue - f.commission - f.clean;
+    });
+    (bookings || []).forEach(b => {
+      const c = cabins.find(x => x.id == b.cabin); if (!c) return;
+      const a = b.inDate > from ? b.inDate : from, z = b.outDate < end ? b.outDate : end;
+      c.occNights += Math.max(0, nightsBetween(a, z));
+    });
+    (expenses || []).filter(e => e.date >= from && e.date <= to).forEach(e => {
+      const v = +e.amount || 0; tot.expenses += v;
+      cats[e.category || 'Другое'] = (cats[e.category || 'Другое'] || 0) + v;
+      const c = cabins.find(x => x.id == e.cabin); if (c) c.expenses += v;
+    });
+    cabins.forEach(c => { c.net = c.revenue - c.clean - c.commission - c.expenses; c.occ = days ? Math.min(1, c.occNights / days) : 0; c.adr = c.nights ? c.revenue / c.nights : 0; });
+    tot.net = tot.revenue - tot.clean - tot.commission - tot.expenses;
+    tot.occ = days && cabins.length ? Math.min(1, cabins.reduce((s, c) => s + c.occNights, 0) / (days * cabins.length)) : 0;
+    tot.adr = tot.nights ? tot.revenue / tot.nights : 0;
+    return { tot, cabins, sources: Object.values(sources).sort((a, b) => b.revenue - a.revenue), cats, bookings: bs, days };
+  }
+  /* Свободные окна: [{from, to}] — to = дата выезда */
+  function freeWindows(bookings, cabinId, from, days) {
+    const end = add(from, days), busy = (bookings || []).filter(b => b.cabin == cabinId && b.outDate > from && b.inDate < end).sort((a, b) => a.inDate < b.inDate ? -1 : 1);
+    const out = []; let cur = from;
+    busy.forEach(b => { if (b.inDate > cur) out.push({ from: cur, to: b.inDate }); if (b.outDate > cur) cur = b.outDate; });
+    if (cur < end) out.push({ from: cur, to: end });
+    return out.filter(w => nightsBetween(w.from, w.to) >= 1);
+  }
+  /* Домик ждёт уборки: последняя выехавшая бронь не отмечена как убранная */
+  function needsCleaning(bookings, cabinId, today) {
+    const last = (bookings || []).filter(b => b.cabin == cabinId && b.outDate <= today).sort((a, b) => a.outDate < b.outDate ? 1 : -1)[0];
+    if (!last || (last.clean && last.clean.done)) return null;
+    const stay = (bookings || []).find(b => b.cabin == cabinId && b.id !== last.id && b.inDate >= last.outDate && b.inDate < today);
+    return stay ? null : last;
+  }
+  return { SOURCES, EXP_CATS, normSource, parseRanges, nightPrice, stayPrice, commissionFor, fin, monthRange, report, freeWindows, needsCleaning, add, nightsBetween };
+})();
+
+/* ===== Тексты отчётов бота (общие для Яндекса и Google) ===== */
+const MON_NOM = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+const rub = n => (n < 0 ? '−' : '') + money(Math.abs(n));
+function cleaningWarn(b, bookings, today) {
+  const nc = FIN.needsCleaning(bookings, b.cabin, today);
+  return nc && nc.id !== b.id ? '⚠️ <b>Домик ещё не отмечен как убранный</b> после выезда ' + esc(nc.name) + ' (' + fd(nc.outDate) + ')' : '';
+}
+function checkoutReportText(b, cfg) {
+  const f = FIN.fin(b, cfg), c = (cfg.cabins || []).find(x => x.id == b.cabin) || { name: 'Домик' };
+  const lines = ['🧾 <b>Итог по выезду: ' + esc(c.name) + ', ' + esc(b.name) + '</b>', '',
+    'Доход: ' + money(f.revenue) + (f.kept ? ' (в т.ч. удержано из залога ' + money(f.kept) + ')' : ''),
+    'Уборка: −' + money(f.clean),
+    'Комиссия (' + esc(FIN.normSource(b.source)) + '): −' + money(f.commission),
+    '<b>Чистыми: ' + rub(f.net) + '</b>'];
+  if (f.debt > 0) lines.push('', '❗️ Гость не доплатил ' + money(f.debt));
+  if (b.deposit && +b.deposit.amount && (b.deposit.status || 'held') === 'held') lines.push('💼 Залог ' + money(b.deposit.amount) + ': отметьте в приложении — вернули или удержали');
+  if (!(b.clean && b.clean.done)) lines.push('🧹 Не забудьте отметить уборку, когда домик будет убран');
+  return lines.join('\n');
+}
+function monthReportText(ym, cfg, bookings, expenses) {
+  const [y, m] = ym.split('-').map(Number);
+  const r = FIN.report(cfg, bookings, expenses, ...FIN.monthRange(ym));
+  const ly = FIN.report(cfg, bookings, expenses, ...FIN.monthRange((y - 1) + '-' + String(m).padStart(2, '0')));
+  const pc = x => Math.round((x || 0) * 100) + '%';
+  const lines = ['📊 <b>Отчёт за ' + MON_NOM[m - 1] + ' ' + y + '</b>', '',
+    'Доход: ' + money(r.tot.revenue),
+    'Уборка: −' + money(r.tot.clean),
+    'Комиссии площадок: −' + money(r.tot.commission),
+    'Прочие расходы: −' + money(r.tot.expenses),
+    '<b>Чистыми: ' + rub(r.tot.net) + '</b>'];
+  if (ly.tot.revenue) lines.push('Год назад (' + MON_NOM[m - 1] + ' ' + (y - 1) + '): доход ' + money(ly.tot.revenue) + ' → сейчас ' + (r.tot.revenue >= ly.tot.revenue ? '+' : '−') + Math.abs(Math.round((r.tot.revenue / ly.tot.revenue - 1) * 100)) + '%');
+  if (+cfg.goal) lines.push('🎯 Цель ' + money(cfg.goal) + ': выполнено ' + pc(r.tot.revenue / cfg.goal));
+  lines.push('', '🛏 Выездов: ' + r.tot.count + ' · ночей: ' + r.tot.nights + ' · загрузка ' + pc(r.tot.occ) + ' · средняя цена ' + money(r.tot.adr) + '/ночь');
+  lines.push('', '<b>По домикам</b>');
+  r.cabins.forEach(c => lines.push('• ' + esc(c.name) + ': чистыми ' + rub(c.net) + ' · доход ' + money(c.revenue) + ' · загрузка ' + pc(c.occ)));
+  if (r.sources.length) {
+    lines.push('', '<b>Откуда гости</b>');
+    r.sources.forEach(s => lines.push('• ' + esc(s.name) + ': ' + s.count + ' · ' + money(s.revenue)));
+  }
+  return lines.join('\n');
 }
