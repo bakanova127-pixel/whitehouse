@@ -879,7 +879,7 @@ function openSettings() {
     </div>`).join('')}</div>
   <button class="btn ghost" data-act="addcabin">${ICON.plus}Добавить домик</button>
   <button class="btn" data-act="savesettings">Сохранить</button>
-  <div class="hint" style="text-align:center">${serverOK ? 'Брони сохраняются в Google-таблицу, бот присылает напоминания о заездах.' : cloudOK ?'Данные хранятся в вашем аккаунте Telegram и видны только вам — на любом вашем устройстве.' : 'Сейчас приложение открыто не в Telegram: данные сохраняются только в этом браузере.'}</div>`);
+  <div class="hint" style="text-align:center">${serverOK ? 'Брони и дела сохраняются на сервере, бот присылает напоминания о заездах и выездах.' : cloudOK ?'Данные хранятся в вашем аккаунте Telegram и видны только вам — на любом вашем устройстве.' : 'Сейчас приложение открыто не в Telegram: данные сохраняются только в этом браузере.'}</div>`);
 }
 function readSettings() {
   document.querySelectorAll('#s_list [data-sid]').forEach(inp => {
